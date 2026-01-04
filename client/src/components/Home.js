@@ -5,10 +5,17 @@ import { config, getImageUrl } from '../config';
 function Home({ currentUser }) {
   const [channels, setChannels] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddAgentForm, setShowAddAgentForm] = useState(false);
+
   const [formData, setFormData] = useState({
     channelSecret: '',
     channelAccessToken: '',
     channelName: ''
+  });
+  const [agentFormData, setAgentFormData] = useState({
+    username: '',
+    password: '',
+    conformPassword: ''
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -30,7 +37,12 @@ function Home({ currentUser }) {
       console.error('Error fetching channels:', err);
     }
   };
-
+  const handleSubmitAgent = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage({ type: '', text: '' });
+    console.log('Agent Form Data:', agentFormData);
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -63,6 +75,7 @@ function Home({ currentUser }) {
         setMessage({ type: 'error', text: data.message });
       }
     } catch (err) {
+      // alert('Error adding channel: ' + err.message);
       setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' });
     } finally {
       setLoading(false);
@@ -93,13 +106,21 @@ function Home({ currentUser }) {
   return (
     <div className="home-container">
       <div className="home-header">
-        <h1>จัดการ LINE Channels</h1>
-        <button 
-          className="add-button"
-          onClick={() => setShowAddForm(!showAddForm)}
-        >
-          {showAddForm ? '✕ ยกเลิก' : '+ เพิ่ม Channel'}
-        </button>
+        <h1>จัดการ LINE Channels agent</h1>
+        <div>
+          <button
+            className="add-button"
+            onClick={() => setShowAddForm(!showAddForm)}
+          >
+            {showAddForm ? '✕ ยกเลิก' : '+ เพิ่ม Channel'}
+          </button>
+          <button
+            className="add-button"
+            onClick={() => setShowAddAgentForm(!showAddAgentForm)}
+          >
+            {showAddAgentForm ? '✕ ยกเลิก' : '+ เพิ่ม agent'}
+          </button>
+        </div>
       </div>
 
       {message.text && (
@@ -117,7 +138,7 @@ function Home({ currentUser }) {
               <input
                 type="text"
                 value={formData.channelName}
-                onChange={(e) => setFormData({...formData, channelName: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, channelName: e.target.value })}
                 placeholder="My LINE Channel"
               />
             </div>
@@ -127,7 +148,7 @@ function Home({ currentUser }) {
               <input
                 type="text"
                 value={formData.channelSecret}
-                onChange={(e) => setFormData({...formData, channelSecret: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, channelSecret: e.target.value })}
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 required
               />
@@ -137,15 +158,15 @@ function Home({ currentUser }) {
               <label>Channel Access Token *</label>
               <textarea
                 value={formData.channelAccessToken}
-                onChange={(e) => setFormData({...formData, channelAccessToken: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, channelAccessToken: e.target.value })}
                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 rows="4"
                 required
               />
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="submit-button"
               disabled={loading}
             >
@@ -154,10 +175,54 @@ function Home({ currentUser }) {
           </form>
         </div>
       )}
+      {showAddAgentForm && (
+        <div className="add-form-container">
+          <h2>เพิ่ม agent ใหม่</h2>
+          <form onSubmit={handleSubmitAgent} className="add-form">
+            <div className="form-group">
+              <label>userName</label>
+              <input
+                type="text"
+                value={agentFormData.username}
+                onChange={(e) => setAgentFormData({ ...agentFormData, username: e.target.value })}
+                placeholder="Username agent"
+              />
+            </div>
 
+            <div className="form-group">
+              <label>password agent</label>
+              <input
+                type="password"
+                value={agentFormData.password}
+                onChange={(e) => setAgentFormData({ ...agentFormData, password: e.target.value })}
+                placeholder="agent1234"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>password agent</label>
+              <input
+                type="password"
+                value={agentFormData.conformPassword}
+                onChange={(e) => setAgentFormData({ ...agentFormData, conformPassword: e.target.value })}
+                placeholder="agent1234"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="submit-button"
+              disabled={loading}
+            >
+              {loading ? 'กำลังเพิ่ม...' : 'เพิ่ม agent'}
+            </button>
+          </form>
+        </div>
+      )}
       <div className="channels-list">
         <h2>LINE Channels ทั้งหมด ({channels.length})</h2>
-        
+
         {channels.length === 0 ? (
           <div className="empty-state">
             <p>ยังไม่มี LINE Channel</p>
@@ -169,7 +234,7 @@ function Home({ currentUser }) {
               <div key={channel.id} className="channel-card">
                 <div className="channel-header">
                   <h3>{channel.channelName}</h3>
-                  <button 
+                  <button
                     className="delete-button"
                     onClick={() => handleDelete(channel.id)}
                   >

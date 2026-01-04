@@ -68,7 +68,6 @@ const handleActivateLicense = async (e) => {
         userId: currentUser.id
       }),
     });
-
     const data = await response.json();
 
     if (data.success) {
@@ -120,6 +119,7 @@ const handleActivateLicense = async (e) => {
     }
   } catch (err) {
     console.error('Activation error:', err);
+    alert('Error activating license: ' + err.message);
     setMessage({ 
       type: 'error', 
       text: '❌ เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์' 
