@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1",
+    "username": "Test01",
+    "password": "123456789",
+    "role": "admin",
+    "licenseKey": null,
+    "licenseExpiry": null,
+    "createdAt": "2025-11-13T00:00:00.000Z"
+  },
+  {
+    "id": "1763209921653",
+    "username": "Test02",
+    "password": "123456789",
+    "role": "user",
+    "licenseKey": "TOLQI-AHEOZ-3OFR5-WE543-0KMH3",
+    "licenseExpiry": "2025-11-15T13:08:29.169Z",
+    "createdAt": "2025-11-15T12:32:01.653Z"
+  }
+]

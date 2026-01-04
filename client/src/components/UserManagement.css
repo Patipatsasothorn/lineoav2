@@ -1,0 +1,534 @@
+.user-management {
+  padding: 40px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.user-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.user-header h2 {
+  margin: 0;
+  font-size: 28px;
+  color: #333;
+}
+
+.stats {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  background: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #06c755;
+}
+
+.users-table-container {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table thead {
+  background: #f8f9fa;
+}
+
+.users-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 2px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.users-table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #333;
+}
+
+.users-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.you-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: #0d6efd;
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.role-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.role-badge.admin {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+.role-badge.user {
+  background: #cfe2ff;
+  color: #084298;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-badge.no-license {
+  background: #e2e3e5;
+  color: #41464b;
+}
+
+.status-badge.active {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+.status-badge.expired {
+  background: #f8d7da;
+  color: #842029;
+}
+
+.license-key {
+  background: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #d63384;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+  background: #e9ecef;
+  color: #495057;
+}
+
+.btn-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-action.btn-license {
+  background: #06c755;
+  color: white;
+}
+
+.btn-action.btn-license:hover {
+  background: #05b34a;
+}
+
+.btn-action.btn-delete {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-action.btn-delete:hover {
+  background: #bb2d3b;
+}
+
+.license-select-modal {
+  position: absolute;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 100;
+  min-width: 300px;
+  margin-top: 8px;
+}
+
+.license-select-modal h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.license-select-modal select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-confirm,
+.btn-cancel {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.btn-confirm {
+  background: #06c755;
+  color: white;
+}
+
+.btn-confirm:hover {
+  background: #05b34a;
+}
+
+.btn-cancel {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: #5c636a;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN - MOBILE
+   ============================================ */
+
+/* Tablet (768px and below) */
+@media (max-width: 768px) {
+  .user-management {
+    padding: 20px 16px;
+  }
+
+  .user-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .user-header h2 {
+    font-size: 24px;
+  }
+
+  .stats {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .stat-item {
+    flex: 1;
+    padding: 10px 16px;
+    min-width: 0;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  /* Table Container */
+  .users-table-container {
+    padding: 16px;
+    border-radius: 8px;
+    margin: 0 -16px;
+  }
+
+  /* Hide table, show card layout */
+  .users-table {
+    display: block;
+  }
+
+  .users-table thead {
+    display: none;
+  }
+
+  .users-table tbody {
+    display: block;
+  }
+
+  .users-table tbody tr {
+    display: block;
+    margin-bottom: 16px;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 16px;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .users-table tbody tr:hover {
+    background: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+
+  .users-table td {
+    display: block;
+    padding: 8px 0;
+    border: none;
+    text-align: left;
+  }
+
+  .users-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #666;
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  /* Username cell - larger */
+  .users-table td:first-child {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .you-badge {
+    display: inline-block;
+    margin-left: 8px;
+  }
+
+  /* Action buttons - full width */
+  .action-buttons {
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .btn-action {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* License select modal */
+  .license-select-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 400px;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  }
+
+  /* Modal overlay */
+  .license-select-modal::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: -1;
+  }
+
+  .license-select-modal h4 {
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+
+  .license-select-modal select {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .modal-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn-confirm,
+  .btn-cancel {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  /* License key - wrap on mobile */
+  .license-key {
+    display: inline-block;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+
+  /* Badges */
+  .role-badge,
+  .status-badge {
+    display: inline-block;
+    margin-top: 4px;
+  }
+}
+
+/* Small Mobile (480px and below) */
+@media (max-width: 480px) {
+  .user-management {
+    padding: 16px 12px;
+  }
+
+  .user-header h2 {
+    font-size: 20px;
+  }
+
+  .stats {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .stat-item {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 12px 16px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+    margin-bottom: 0;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .users-table-container {
+    padding: 12px;
+  }
+
+  .users-table tbody tr {
+    padding: 12px;
+  }
+
+  .users-table td {
+    font-size: 14px;
+  }
+
+  .users-table td:first-child {
+    font-size: 15px;
+  }
+
+  .license-key {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+
+  .you-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  .role-badge,
+  .status-badge {
+    font-size: 12px;
+    padding: 3px 10px;
+  }
+}
+
+/* Landscape Mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .user-management {
+    padding: 16px;
+  }
+
+  .user-header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .stats {
+    flex-direction: row;
+  }
+}
+
+/* Touch devices - increase touch targets */
+@media (hover: none) and (pointer: coarse) {
+  .btn-action {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  .users-table tbody tr {
+    cursor: pointer;
+  }
+
+  .users-table tbody tr:hover {
+    background: white;
+  }
+
+  .users-table tbody tr:active {
+    background: #f8f9fa;
+  }
+}
+
+/* Desktop - Keep original table layout */
+@media (min-width: 769px) {
+  .users-table td::before {
+    display: none;
+  }
+}

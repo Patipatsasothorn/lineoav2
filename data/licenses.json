@@ -1,0 +1,50 @@
+[
+  {
+    "id": "1763209576789",
+    "key": "4HBRU-IT4RC-BC3JC-NPH3J-YZG7A",
+    "duration": {
+      "minutes": 15,
+      "days": 0,
+      "months": 0,
+      "years": 0
+    },
+    "expiresAt": "2025-11-15T12:41:42.323Z",
+    "createdAt": "2025-11-15T12:26:16.789Z",
+    "createdBy": "1",
+    "activatedBy": "1763209453285",
+    "activatedAt": "2025-11-15T12:26:42.323Z",
+    "status": "active"
+  },
+  {
+    "id": "1763210098489",
+    "key": "V5X9H-TFKEG-CDOL3-0GGKP-1XPI1",
+    "duration": {
+      "minutes": 5,
+      "days": 0,
+      "months": 0,
+      "years": 0
+    },
+    "expiresAt": "2025-11-15T12:40:05.577Z",
+    "createdAt": "2025-11-15T12:34:58.489Z",
+    "createdBy": "1",
+    "activatedBy": "1763209921653",
+    "activatedAt": "2025-11-15T12:35:05.577Z",
+    "status": "active"
+  },
+  {
+    "id": "1763211149687",
+    "key": "TOLQI-AHEOZ-3OFR5-WE543-0KMH3",
+    "duration": {
+      "minutes": 15,
+      "days": 0,
+      "months": 0,
+      "years": 0
+    },
+    "expiresAt": "2025-11-15T13:08:29.169Z",
+    "createdAt": "2025-11-15T12:52:29.687Z",
+    "createdBy": "1",
+    "activatedBy": "1763209921653",
+    "activatedAt": "2025-11-15T12:53:29.169Z",
+    "status": "active"
+  }
+]

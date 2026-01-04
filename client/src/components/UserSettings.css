@@ -1,0 +1,284 @@
+.settings-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.settings-content {
+  background: white;
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.settings-content h2 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 30px 0;
+}
+
+.settings-section {
+  margin-bottom: 40px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid #eee;
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.settings-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 20px 0;
+}
+
+/* ข้อมูลผู้ใช้ */
+.info-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-item label {
+  font-weight: 500;
+  color: #666;
+  min-width: 140px;
+}
+
+.info-item span {
+  color: #1a1a1a;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.role-badge.admin {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.role-badge.user {
+  background: #f5f5f5;
+  color: #666;
+}
+
+/* สถานะ License */
+.license-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.license-status.active {
+  background: #f0fdf4;
+  border: 2px solid #22c55e;
+}
+
+.license-status.expired {
+  background: #fef2f2;
+  border: 2px solid #ef4444;
+}
+
+.license-status.no-license {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+}
+
+.license-status.admin-no-license {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border: 2px solid #667eea;
+}
+
+.status-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.status-text {
+  flex: 1;
+}
+
+.status-text strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: #1a1a1a;
+}
+
+.status-text p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+/* Countdown Timer */
+.countdown-timer {
+  text-align: center;
+  padding: 12px 20px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  min-width: 180px;
+}
+
+.timer-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.timer-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #22c55e;
+}
+
+/* License Form */
+.license-form {
+  max-width: 500px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 15px;
+  font-family: 'Courier New', monospace;
+  transition: all 0.2s;
+}
+
+.form-group input:focus {
+  border-color: #666;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+  outline: none;
+}
+
+.form-group small {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #999;
+}
+
+.message {
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.message.success {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #22c55e;
+}
+
+.message.error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #ef4444;
+}
+
+.btn-activate {
+  width: 100%;
+  padding: 14px;
+  background: #1a1a1a;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-activate:hover:not(:disabled) {
+  background: #333;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-activate:disabled {
+  background: #999;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Warning Box */
+.warning-box {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.warning-box strong {
+  display: block;
+  font-size: 16px;
+  color: #d97706;
+  margin-bottom: 8px;
+}
+
+.warning-box p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #92400e;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settings-container {
+    padding: 15px;
+  }
+
+  .settings-content {
+    padding: 20px;
+  }
+
+  .license-status {
+    flex-direction: column;
+  }
+
+  .countdown-timer {
+    width: 100%;
+  }
+
+  .info-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .info-item label {
+    min-width: auto;
+  }
+}
