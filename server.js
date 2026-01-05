@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -48,10 +50,10 @@ const upload = multer({
 
 // SQL Server Configuration
 const sqlConfig = {
-  server: '103.117.149.61',
-  database: 'LineOA',
-  user: 'sa',
-  password: 'StrongPassw0rd!Here',
+  server: process.env.DB_SERVER,
+  database: process.env.DB_DATABASE,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   options: {
     encrypt: true,
     trustServerCertificate: true,
