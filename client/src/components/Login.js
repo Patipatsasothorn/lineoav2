@@ -40,6 +40,7 @@ function Login({ onLogin }) {
         setError(data.message || 'เข้าสู่ระบบไม่สำเร็จ');
       }
     } catch (err) {
+      // alert('เกิดข้อผิดพลาด: ' + err.message);
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
     } finally {
       setLoading(false);
