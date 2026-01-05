@@ -50,12 +50,12 @@ const upload = multer({
 
 // SQL Server Configuration
 const sqlConfig = {
-  server: 'localhost',
-  database: 'LineOA',
-  user: 'sa',
-  password: 'StrongPassw0rd!Here',
+  server: process.env.DB_SERVER,
+  database: process.env.DB_DATABASE,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   options: {
-    encrypt: false,
+    encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true
   },
@@ -77,8 +77,6 @@ async function connectDB() {
     poolPromise = sql.connect(sqlConfig);
     await poolPromise;
     console.log('✓ Connected to SQL Server');
-    const result = await sql.query('SELECT DB_NAME() AS current_db');
-    console.log('Current Database:', result.recordset[0].current_db);
   } catch (error) {
     console.error('❌ Database connection error:', error);
     process.exit(1);
@@ -152,6 +150,7 @@ async function checkAutoReply(text, userId) {
 // Login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
+
   try {
     const pool = await poolPromise;
     const result = await pool.request()

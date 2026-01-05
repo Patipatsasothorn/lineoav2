@@ -68,14 +68,14 @@
 }
 
 .btn-primary {
-  padding: 12px 25px;
+  /* padding: 12px 25px; */
   background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
   color: white;
   border: none;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  /* transition: transform 0.2s, box-shadow 0.2s; */
   height: 46px;
 }
 
