@@ -178,7 +178,9 @@ function Agent({ currentUser }) {
               required
             />
           </div>
-          <button type="submit" className="btn-primary">Register Agent</button>
+          <div className="form-group">
+            <button type="submit" className="btn-primary">Register Agent</button>
+          </div>
         </form>
       </div>
 

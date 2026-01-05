@@ -50,12 +50,12 @@ const upload = multer({
 
 // SQL Server Configuration
 const sqlConfig = {
-  server: 'localhost',
-  database: 'LineOA',
-  user: 'sa',
-  password: 'StrongPassw0rd!Here',
+  server: process.env.DB_SERVER,
+  database: process.env.DB_DATABASE,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   options: {
-    encrypt: false,
+    encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true
   },
@@ -77,8 +77,6 @@ async function connectDB() {
     poolPromise = sql.connect(sqlConfig);
     await poolPromise;
     console.log('✓ Connected to SQL Server');
-    const result = await sql.query('SELECT DB_NAME() AS current_db');
-    console.log('Current Database:', result.recordset[0].current_db);
   } catch (error) {
     console.error('❌ Database connection error:', error);
     process.exit(1);
@@ -152,6 +150,7 @@ async function checkAutoReply(text, userId) {
 // Login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
+
   try {
     const pool = await poolPromise;
     const result = await pool.request()
@@ -268,10 +267,9 @@ app.post('/api/channels', async (req, res) => {
       .input('secret', sql.NVarChar, channelSecret)
       .input('token', sql.NVarChar, channelAccessToken)
       .input('name', sql.NVarChar, channelName || `LINE Channel ${newChannelId}`)
-      .input('color', sql.NVarChar, '#667eea')
       .input('userId', sql.NVarChar, userId)
-      .query(`INSERT INTO Channels (id, channelSecret, channelAccessToken, channelName, color, userId, createdAt)
-              VALUES (@id, @secret, @token, @name, @color, @userId, GETDATE())`);
+      .query(`INSERT INTO Channels (id, channelSecret, channelAccessToken, channelName, userId, createdAt)
+              VALUES (@id, @secret, @token, @name, @userId, GETDATE())`);
 
     res.json({ success: true, message: 'Channel added successfully', channel: { id: newChannelId } });
   } catch (error) {
@@ -297,46 +295,6 @@ app.get('/api/channels', async (req, res) => {
     res.json({ success: true, channels: result.recordset });
   } catch (error) {
     console.error('Get channels error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Update Channel (name and color)
-app.put('/api/channels/:id', async (req, res) => {
-  const { id } = req.params;
-  const { channelName, color, userId } = req.body;
-
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
-  }
-
-  if (!channelName) {
-    return res.status(400).json({ success: false, message: 'Channel name is required' });
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Channels WHERE id = @id AND userId = @userId');
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Channel not found or no permission' });
-    }
-
-    // Update
-    await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('channelName', sql.NVarChar, channelName)
-      .input('color', sql.NVarChar, color || '#667eea')
-      .query('UPDATE Channels SET channelName = @channelName, color = @color WHERE id = @id');
-
-    res.json({ success: true, message: 'Channel updated successfully' });
-  } catch (error) {
-    console.error('Update channel error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -371,258 +329,6 @@ app.delete('/api/channels/:id', async (req, res) => {
     res.json({ success: true, message: 'Channel removed successfully' });
   } catch (error) {
     console.error('Delete channel error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// ===== TEAM MANAGEMENT (AGENTS) API =====
-
-// Get Agents
-app.get('/api/agents', async (req, res) => {
-  const { userId } = req.query;
-
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
-  }
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query(`
-        SELECT a.*, u.username as agentUsername
-        FROM agents a
-        LEFT JOIN users u ON a.agentUserId = u.id
-        WHERE a.createdBy = @userId
-        ORDER BY a.createdAt DESC
-      `);
-
-    res.json({ success: true, agents: result.recordset });
-  } catch (error) {
-    console.error('Get agents error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Add Agent
-app.post('/api/agents', async (req, res) => {
-  const { agentUsername, assignedChannels, createdBy } = req.body;
-
-  if (!agentUsername || !createdBy) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Find user by username
-    const userResult = await pool.request()
-      .input('username', sql.NVarChar, agentUsername)
-      .query('SELECT id FROM users WHERE username = @username');
-
-    if (userResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งานที่มีชื่อนี้' });
-    }
-
-    const agentUserId = userResult.recordset[0].id;
-
-    // Check if already exists
-    const existingAgent = await pool.request()
-      .input('agentUserId', sql.NVarChar, agentUserId)
-      .input('createdBy', sql.NVarChar, createdBy)
-      .query('SELECT id FROM agents WHERE agentUserId = @agentUserId AND createdBy = @createdBy');
-
-    if (existingAgent.recordset.length > 0) {
-      return res.status(400).json({ success: false, message: 'ลูกทีมคนนี้มีอยู่แล้ว' });
-    }
-
-    // Insert agent
-    const agentId = Date.now().toString();
-    await pool.request()
-      .input('id', sql.NVarChar, agentId)
-      .input('agentUserId', sql.NVarChar, agentUserId)
-      .input('agentUsername', sql.NVarChar, agentUsername)
-      .input('assignedChannels', sql.NVarChar, JSON.stringify(assignedChannels || []))
-      .input('createdBy', sql.NVarChar, createdBy)
-      .query(`
-        INSERT INTO agents (id, agentUserId, agentUsername, assignedChannels, createdBy, createdAt)
-        VALUES (@id, @agentUserId, @agentUsername, @assignedChannels, @createdBy, GETDATE())
-      `);
-
-    // Insert channel assignments
-    if (assignedChannels && assignedChannels.length > 0) {
-      for (const channelId of assignedChannels) {
-        await pool.request()
-          .input('userId', sql.NVarChar, agentUserId)
-          .input('channelId', sql.NVarChar, channelId)
-          .input('assignedBy', sql.NVarChar, createdBy)
-          .query(`
-            INSERT INTO user_channel_assignments (userId, channelId, assignedBy, createdAt)
-            VALUES (@userId, @channelId, @assignedBy, GETDATE())
-          `);
-      }
-    }
-
-    res.json({ success: true, message: 'เพิ่มลูกทีมสำเร็จ', agent: { id: agentId } });
-  } catch (error) {
-    console.error('Add agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Update Agent
-app.put('/api/agents/:id', async (req, res) => {
-  const { id } = req.params;
-  const { agentUsername, assignedChannels, createdBy } = req.body;
-
-  if (!createdBy) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('createdBy', sql.NVarChar, createdBy)
-      .query('SELECT agentUserId FROM agents WHERE id = @id AND createdBy = @createdBy');
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
-    }
-
-    const agentUserId = checkResult.recordset[0].agentUserId;
-
-    // Update agent
-    await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('agentUsername', sql.NVarChar, agentUsername)
-      .input('assignedChannels', sql.NVarChar, JSON.stringify(assignedChannels || []))
-      .query('UPDATE agents SET agentUsername = @agentUsername, assignedChannels = @assignedChannels WHERE id = @id');
-
-    // Delete old channel assignments
-    await pool.request()
-      .input('userId', sql.NVarChar, agentUserId)
-      .input('assignedBy', sql.NVarChar, createdBy)
-      .query('DELETE FROM user_channel_assignments WHERE userId = @userId AND assignedBy = @assignedBy');
-
-    // Insert new channel assignments
-    if (assignedChannels && assignedChannels.length > 0) {
-      for (const channelId of assignedChannels) {
-        await pool.request()
-          .input('userId', sql.NVarChar, agentUserId)
-          .input('channelId', sql.NVarChar, channelId)
-          .input('assignedBy', sql.NVarChar, createdBy)
-          .query(`
-            INSERT INTO user_channel_assignments (userId, channelId, assignedBy, createdAt)
-            VALUES (@userId, @channelId, @assignedBy, GETDATE())
-          `);
-      }
-    }
-
-    res.json({ success: true, message: 'อัปเดตลูกทีมสำเร็จ' });
-  } catch (error) {
-    console.error('Update agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Delete Agent
-app.delete('/api/agents/:id', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const pool = await poolPromise;
-
-    // Get agent info before deleting
-    const agentResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .query('SELECT agentUserId, createdBy FROM agents WHERE id = @id');
-
-    if (agentResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found' });
-    }
-
-    const { agentUserId, createdBy } = agentResult.recordset[0];
-
-    // Delete channel assignments
-    await pool.request()
-      .input('userId', sql.NVarChar, agentUserId)
-      .input('assignedBy', sql.NVarChar, createdBy)
-      .query('DELETE FROM user_channel_assignments WHERE userId = @userId AND assignedBy = @assignedBy');
-
-    // Delete agent
-    await pool.request()
-      .input('id', sql.NVarChar, id)
-      .query('DELETE FROM agents WHERE id = @id');
-
-    res.json({ success: true, message: 'ลบลูกทีมสำเร็จ' });
-  } catch (error) {
-    console.error('Delete agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// ===== PINNED CONVERSATIONS API =====
-
-// Get Pinned Conversations
-app.get('/api/pinned-conversations', async (req, res) => {
-  const { userId } = req.query;
-
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
-  }
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT * FROM pinned_conversations WHERE userId = @userId ORDER BY pinnedAt DESC');
-
-    res.json({ success: true, pinnedConversations: result.recordset });
-  } catch (error) {
-    console.error('Get pinned conversations error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Toggle Pin Conversation
-app.post('/api/pinned-conversations/toggle', async (req, res) => {
-  const { userId, conversationKey } = req.body;
-
-  if (!userId || !conversationKey) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Check if already pinned
-    const existingPin = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .input('conversationKey', sql.NVarChar, conversationKey)
-      .query('SELECT id FROM pinned_conversations WHERE userId = @userId AND conversationKey = @conversationKey');
-
-    if (existingPin.recordset.length > 0) {
-      // Unpin
-      await pool.request()
-        .input('userId', sql.NVarChar, userId)
-        .input('conversationKey', sql.NVarChar, conversationKey)
-        .query('DELETE FROM pinned_conversations WHERE userId = @userId AND conversationKey = @conversationKey');
-
-      res.json({ success: true, pinned: false, message: 'ยกเลิกการปักหมุดแล้ว' });
-    } else {
-      // Pin
-      await pool.request()
-        .input('userId', sql.NVarChar, userId)
-        .input('conversationKey', sql.NVarChar, conversationKey)
-        .query('INSERT INTO pinned_conversations (userId, conversationKey, pinnedAt) VALUES (@userId, @conversationKey, GETDATE())');
-
-      res.json({ success: true, pinned: true, message: 'ปักหมุดแล้ว' });
-    }
-  } catch (error) {
-    console.error('Toggle pin error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
