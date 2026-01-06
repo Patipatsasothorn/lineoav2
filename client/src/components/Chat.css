@@ -223,7 +223,15 @@
 
 .message-time {
   font-size: 11px;
-  color: #a0aec0;
+  color: #000000;
+}
+
+.message-time.main-time {
+  font-size: 15px;
+  color: #000000;
+  /* margin-right: 25px; */
+  position: absolute;
+  margin-top: -5px;
 }
 
 .chat-main {

@@ -873,11 +873,12 @@ function Chat({ currentUser }) {
                         <span className="channel-badge" style={{ background: getChannelColor(lastMessage.channelId) }}>
                           {lastMessage.channelName}
                         </span>
-                        <div className="message-time">
-                          {new Date(lastMessage.timestamp).toLocaleString('th-TH', {
+                        <div className="message-time main-time">
+                          {new Date(Number(lastMessage.timestamp)).toLocaleString('th-TH', {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
+                          {/* {lastMessage.timestamp} */}
                         </div>
                       </div>
                     );
@@ -953,7 +954,7 @@ function Chat({ currentUser }) {
                       {renderMessageContent(msg)}
                     </div>
                     <div className="message-time">
-                      {new Date(msg.timestamp).toLocaleString('th-TH', {
+                      {new Date(Number(msg.timestamp)).toLocaleString('th-TH', {
                         hour: '2-digit',
                         minute: '2-digit'
                       })}
