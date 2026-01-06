@@ -103,6 +103,7 @@
   border-bottom: 1px solid #e2e8f0;
   cursor: pointer;
   transition: background 0.2s;
+  position: relative;
 }
 
 .conversation-item:hover {
@@ -112,6 +113,50 @@
 .conversation-item.active {
   background: #edf2f7;
   border-left: 3px solid #667eea;
+}
+
+.conversation-item.pinned {
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+}
+
+.conversation-item.pinned.active {
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
+}
+
+/* Pin Button */
+.pin-button {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0;
+  transition: all 0.2s;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+.conversation-item:hover .pin-button {
+  opacity: 0.5;
+}
+
+.pin-button:hover {
+  opacity: 1 !important;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pin-button.pinned {
+  opacity: 1;
+  color: #f59e0b;
+}
+
+.pin-button.pinned:hover {
+  background: #fef3c7;
 }
 
 .conversation-header {
@@ -134,6 +179,9 @@
 }
 
 .channel-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
   font-size: 11px;
   padding: 3px 8px;
   /* สีพื้นหลังจะถูกกำหนดแบบ inline ตาม channelName */

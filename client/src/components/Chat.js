@@ -20,38 +20,16 @@ function Chat({ currentUser }) {
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false); // สำหรับ mobile navigation
   const [licenseStatus, setLicenseStatus] = useState(null); // สถานะ license
+  const [pinnedConversations, setPinnedConversations] = useState([]); // การสนทนาที่ปักหมุด
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // ฟังก์ชันสร้างสีจากชื่อ Line OA (ให้สีต่างกันแต่ละ Line OA)
-  const getColorForChannel = (channelName) => {
-    if (!channelName) return '#2d3748'; // สีเริ่มต้น
-
-    // สร้าง hash จากชื่อ
-    let hash = 0;
-    for (let i = 0; i < channelName.length; i++) {
-      hash = channelName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    // แปลง hash เป็นสี (เลือกสีที่สวยและอ่านง่าย)
-    const colors = [
-      '#e53e3e', // แดง
-      '#dd6b20', // ส้ม
-      '#d69e2e', // เหลือง-ทอง
-      '#38a169', // เขียว
-      '#319795', // เขียวน้ำเงิน
-      '#3182ce', // น้ำเงิน
-      '#5a67d8', // ม่วงน้ำเงิน
-      '#805ad5', // ม่วง
-      '#d53f8c', // ชมพู
-      '#c53030', // แดงเข้ม
-      '#2f855a', // เขียวเข้ม
-      '#2c5282', // น้ำเงินเข้ม
-    ];
-
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
+  // ฟังก์ชันดึงสีของ Channel จากฐานข้อมูล
+  const getChannelColor = (channelId) => {
+    if (!channelId) return '#667eea'; // สีเริ่มต้น
+    const channel = channels.find(c => c.id === channelId);
+    return channel?.color || '#667eea';
   };
 
   useEffect(() => {
@@ -60,6 +38,7 @@ function Chat({ currentUser }) {
       fetchMessages();
       fetchGroups();
       fetchLicenseStatus(); // ตรวจสอบสถานะ license
+      fetchPinnedConversations(); // ดึงการสนทนาที่ปักหมุด
     }
     // เชื่อมต่อ SSE สำหรับ real-time updates
     eventSourceRef.current = new EventSource('http://localhost:5000/api/messages/stream');
@@ -151,6 +130,44 @@ function Chat({ currentUser }) {
     } catch (error) {
       console.error('Error fetching license status:', error);
     }
+  };
+
+  const fetchPinnedConversations = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/pinned-conversations?userId=${currentUser.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setPinnedConversations(data.pinnedConversations);
+      }
+    } catch (error) {
+      console.error('Error fetching pinned conversations:', error);
+    }
+  };
+
+  const togglePinConversation = async (conversationKey) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/pinned-conversations/toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          conversationKey: conversationKey
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchPinnedConversations(); // รีเฟรชรายการปักหมุด
+      }
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+    }
+  };
+
+  const isPinned = (conversationKey) => {
+    return pinnedConversations.some(pin => pin.conversationKey === conversationKey);
   };
 
   const handleSendMessage = async (e) => {
@@ -414,11 +431,22 @@ function Chat({ currentUser }) {
     groupedMessages[key].sort((a, b) => b.timestamp - a.timestamp);
   });
 
-  // เรียงรายการสนทนาตามข้อความล่าสุด (ใหม่ไปเก่า)
+  // เรียงรายการสนทนา: ปักหมุดก่อน แล้วเรียงตามข้อความล่าสุด
   const sortedConversations = Object.entries(groupedMessages).sort((a, b) => {
-    const lastMessageA = a[1][0];
-    const lastMessageB = b[1][0];
-    return lastMessageB.timestamp - lastMessageA.timestamp;
+    const keyA = a[0];
+    const keyB = b[0];
+    const isPinnedA = isPinned(keyA);
+    const isPinnedB = isPinned(keyB);
+
+    // ถ้าทั้งคู่ปักหมุด หรือไม่ปักหมุด ให้เรียงตามเวลา
+    if (isPinnedA === isPinnedB) {
+      const lastMessageA = a[1][0];
+      const lastMessageB = b[1][0];
+      return lastMessageB.timestamp - lastMessageA.timestamp;
+    }
+
+    // ถ้าปักหมุดแค่อันเดียว ให้อันที่ปักหมุดอยู่บนสุด
+    return isPinnedA ? -1 : 1;
   });
 
   // กรอง conversations ตาม searchQuery
@@ -668,10 +696,12 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
               const receivedMessage = userMessages.find(msg => msg.type === 'received');
               const displayName = receivedMessage ? receivedMessage.userName : lastMessage.userName;
               
+              const conversationKey = `${userId}_${channelId}`;
+
               return (
-                <div 
-                  key={`${userId}_${channelId}`}
-                  className={`conversation-item grouped ${selectedUser === userId && selectedChannel === channelId ? 'active' : ''}`}
+                <div
+                  key={conversationKey}
+                  className={`conversation-item grouped ${selectedUser === userId && selectedChannel === channelId ? 'active' : ''} ${isPinned(conversationKey) ? 'pinned' : ''}`}
                   onClick={() => {
                     if (!selectionMode) {
                       handleSelectConversation(userId, channelId);
@@ -689,17 +719,26 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                       onClick={(e) => e.stopPropagation()}
                     />
                   )}
+                  <button
+                    className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePinConversation(conversationKey);
+                    }}
+                  >
+                    📌
+                  </button>
                   <div className="conversation-header">
                     <span className="user-name">
                       {displayName}
-                    </span>
-                    <span className="channel-badge" style={{ background: getColorForChannel(lastMessage.channelName) }}>
-                      {lastMessage.channelName}
                     </span>
                   </div>
                   <div className="last-message">
                     {lastMessage.text.substring(0, 30)}...
                   </div>
+                  <span className="channel-badge" style={{ background: getChannelColor(lastMessage.channelId) }}>
+                    {lastMessage.channelName}
+                  </span>
                 </div>
               );
             })}
@@ -723,9 +762,9 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
         const [userId, channelId] = conversationKey.split('_');
         
         return (
-          <div 
+          <div
             key={conversationKey}
-            className={`conversation-item ${selectedUser === lastMessage.userId && selectedChannel === lastMessage.channelId ? 'active' : ''}`}
+            className={`conversation-item ${isPinned(conversationKey) ? 'pinned' : ''} ${selectedUser === lastMessage.userId && selectedChannel === lastMessage.channelId ? 'active' : ''}`}
             onClick={() => {
               if (!selectionMode) {
                 handleSelectConversation(lastMessage.userId, lastMessage.channelId);
@@ -743,23 +782,31 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                 onClick={(e) => e.stopPropagation()}
               />
             )}
+            <button
+              className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePinConversation(conversationKey);
+              }}
+              title={isPinned(conversationKey) ? 'ยกเลิกปักหมุด' : 'ปักหมุด'}
+            >
+              📌
+            </button>
             <div className="conversation-header">
               <span className="user-name">
                 {displayName}
               </span>
-              <div className="conversation-meta">
-                <span className="channel-badge" style={{ background: getColorForChannel(lastMessage.channelName) }}>
-                  {lastMessage.channelName}
-                </span>
-                {unreadCount > 0 && (
-                  <span className="unread-badge">{unreadCount}</span>
-                )}
-              </div>
+              {unreadCount > 0 && (
+                <span className="unread-badge">{unreadCount}</span>
+              )}
             </div>
             <div className="last-message">
               {lastMessage.text.substring(0, 50)}
               {lastMessage.text.length > 50 ? '...' : ''}
             </div>
+            <span className="channel-badge" style={{ background: getChannelColor(lastMessage.channelId) }}>
+              {lastMessage.channelName}
+            </span>
             <div className="message-time">
               {new Date(lastMessage.timestamp).toLocaleString('th-TH', {
                 hour: '2-digit',
