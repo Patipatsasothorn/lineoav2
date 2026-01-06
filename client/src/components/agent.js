@@ -23,10 +23,18 @@ function Agent({ currentUser }) {
     isActive: true
   });
 
+  // Channel management state
+  const [userChannels, setUserChannels] = useState([]);
+  const [managingChannelsAgent, setManagingChannelsAgent] = useState(null);
+  const [assignedChannelIds, setAssignedChannelIds] = useState([]);
+
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     fetchAgents();
+    if (currentUser) {
+      fetchUserChannels();
+    }
   }, [currentUser]);
 
   const fetchAgents = async () => {
@@ -45,6 +53,19 @@ function Agent({ currentUser }) {
       setError('Failed to fetch agents');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserChannels = async () => {
+    if (!currentUser) return;
+    try {
+      const response = await fetch(`${API_URL}/api/channels?userId=${currentUser.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setUserChannels(data.channels);
+      }
+    } catch (err) {
+      console.error('Fetch channels error:', err);
     }
   };
 
@@ -128,6 +149,50 @@ function Agent({ currentUser }) {
       }
     } catch (err) {
       setError('Failed to update agent');
+    }
+  };
+
+  const openChannelsModal = async (agent) => {
+    setManagingChannelsAgent(agent);
+    try {
+      const response = await fetch(`${API_URL}/api/agents/${agent.id}/channels`);
+      const data = await response.json();
+      if (data.success) {
+        setAssignedChannelIds(data.channelIds || []);
+      }
+    } catch (err) {
+      console.error('Fetch assigned channels error:', err);
+      setAssignedChannelIds([]);
+    }
+  };
+
+  const handleChannelToggle = (channelId) => {
+    setAssignedChannelIds(prev =>
+      prev.includes(channelId)
+        ? prev.filter(id => id !== channelId)
+        : [...prev, channelId]
+    );
+  };
+
+  const saveChannelAssignments = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/agents/${managingChannelsAgent.id}/channels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelIds: assignedChannelIds,
+          userId: currentUser.id
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Channels assigned successfully');
+        setManagingChannelsAgent(null);
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      setError('Failed to assign channels');
     }
   };
 
@@ -216,6 +281,7 @@ function Agent({ currentUser }) {
 
               <div className="agent-actions">
                 <button className="btn-edit" onClick={() => openEditModal(agent)}>Edit</button>
+                <button className="btn-channels" onClick={() => openChannelsModal(agent)}>Channels</button>
                 <button className="btn-delete" onClick={() => handleDelete(agent.id)}>Delete</button>
               </div>
             </div>
@@ -280,6 +346,50 @@ function Agent({ currentUser }) {
                 <button type="submit" className="btn-primary">Save Changes</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Channels Modal */}
+      {managingChannelsAgent && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Manage Channels: {managingChannelsAgent.name || managingChannelsAgent.username}</h3>
+            <p style={{ color: '#7f8c8d', fontSize: '0.9rem', marginBottom: '15px' }}>
+              Select LINE channels this agent can access and manage.
+            </p>
+
+            <div className="channel-assignment-list">
+              {userChannels.length > 0 ? (
+                userChannels.map(channel => (
+                  <div key={channel.id} className="channel-assignment-item">
+                    <input
+                      type="checkbox"
+                      id={`channel-${channel.id}`}
+                      checked={assignedChannelIds.includes(channel.id)}
+                      onChange={() => handleChannelToggle(channel.id)}
+                    />
+                    <label htmlFor={`channel-${channel.id}`}>{channel.channelName}</label>
+                  </div>
+                ))
+              ) : (
+                <p style={{ textAlign: 'center', padding: '20px', color: '#bdc3c7' }}>
+                  No channels found. Please add a channel first.
+                </p>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn-cancel" onClick={() => setManagingChannelsAgent(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={saveChannelAssignments}
+                disabled={userChannels.length === 0}
+              >
+                Save Assignments
+              </button>
+            </div>
           </div>
         </div>
       )}
