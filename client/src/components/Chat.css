@@ -203,9 +203,12 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }
@@ -313,6 +316,7 @@
     opacity: 0;
     transform: translateY(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -333,9 +337,12 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.1);
   }
@@ -404,6 +411,7 @@
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -447,7 +455,8 @@
 }
 
 .message.sent .message-text {
-  background: #06C755; /* LINE green color */
+  background: #06C755;
+  /* LINE green color */
   color: white;
   border-bottom-right-radius: 4px;
 }
@@ -701,8 +710,88 @@
 .btn-confirm:hover {
   background: #05b04c;
 }
+
+/* Archive Modal Specific */
+.modal-icon.archive {
+  font-size: 48px;
+  margin-bottom: 16px;
+  text-align: center;
+  background: #fff7ed;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  margin: 0 auto 20px auto;
+  color: #f59e0b;
+}
+
+.modal-content.archive-modal {
+  text-align: center;
+  width: 450px;
+}
+
+.modal-subtitle {
+  color: #718096;
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.modal-field {
+  text-align: left;
+  margin-bottom: 24px;
+}
+
+.modal-field label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 8px;
+}
+
+.archive-note-input {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.archive-note-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+.btn-confirm.archive {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  padding: 12px 24px;
+  border-radius: 8px;
+  flex: 1;
+}
+
+.btn-confirm.archive:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-confirm.archive:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* Image and Sticker Styles */
-.btn-attach, .btn-sticker {
+.btn-attach,
+.btn-sticker {
   background: #f7fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -717,12 +806,14 @@
   margin-right: 8px;
 }
 
-.btn-attach:hover, .btn-sticker:hover {
+.btn-attach:hover,
+.btn-sticker:hover {
   background: #edf2f7;
   border-color: #cbd5e0;
 }
 
-.btn-attach:disabled, .btn-sticker:disabled {
+.btn-attach:disabled,
+.btn-sticker:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -756,7 +847,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .btn-remove-image:hover {
@@ -788,7 +879,7 @@
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   width: 400px;
   max-height: 400px;
   z-index: 1000;
@@ -993,8 +1084,10 @@
   }
 
   .message-input-form input {
-    font-size: 16px; /* Prevent zoom on iOS */
-    min-height: 44px; /* Touch-friendly */
+    font-size: 16px;
+    /* Prevent zoom on iOS */
+    min-height: 44px;
+    /* Touch-friendly */
   }
 
   .message-input-form button {
@@ -1004,7 +1097,8 @@
   }
 
   /* Attach and sticker buttons */
-  .btn-attach, .btn-sticker {
+  .btn-attach,
+  .btn-sticker {
     width: 44px;
     height: 44px;
     font-size: 20px;
@@ -1175,12 +1269,15 @@
 
 /* Touch improvements */
 @media (hover: none) and (pointer: coarse) {
+
   /* Increase touch targets */
   .conversation-item {
     min-height: 60px;
   }
 
-  .btn-attach, .btn-sticker, .message-input-form button {
+  .btn-attach,
+  .btn-sticker,
+  .message-input-form button {
     min-width: 48px;
     min-height: 48px;
   }
@@ -1194,17 +1291,20 @@
     background: #f7fafc;
   }
 
-  .btn-attach:hover, .btn-sticker:hover {
+  .btn-attach:hover,
+  .btn-sticker:hover {
     background: #f7fafc;
   }
 
-  .btn-attach:active, .btn-sticker:active {
+  .btn-attach:active,
+  .btn-sticker:active {
     background: #edf2f7;
   }
 }
 
 /* Scrollbar styling for better mobile experience */
 @media (max-width: 768px) {
+
   .conversations-list::-webkit-scrollbar,
   .messages-container::-webkit-scrollbar,
   .sticker-grid::-webkit-scrollbar {
