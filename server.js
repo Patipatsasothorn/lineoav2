@@ -33,14 +33,12 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({
-const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-
 
     if (mimetype && extname) {
       return cb(null, true);
@@ -56,12 +54,7 @@ const sqlConfig = {
   database: 'LineOA',
   user: 'sa',
   password: 'StrongPassw0rd!Here',
-  server: 'localhost',
-  database: 'LineOA',
-  user: 'sa',
-  password: 'StrongPassw0rd!Here',
   options: {
-    encrypt: false,
     encrypt: false,
     trustServerCertificate: true,
     enableArithAbort: true
@@ -86,8 +79,6 @@ async function connectDB() {
     console.log('✓ Connected to SQL Server');
     const result = await sql.query('SELECT DB_NAME() AS current_db');
     console.log('Current Database:', result.recordset[0].current_db);
-    const result = await sql.query('SELECT DB_NAME() AS current_db');
-    console.log('Current Database:', result.recordset[0].current_db);
   } catch (error) {
     console.error('❌ Database connection error:', error);
     process.exit(1);
@@ -99,7 +90,6 @@ function generateLicenseKey() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const segments = 5;
   const segmentLength = 5;
-
 
   let key = '';
   for (let i = 0; i < segments; i++) {
@@ -122,12 +112,10 @@ function calculateExpiryDate(duration) {
   const now = new Date();
   const expiry = new Date(now);
 
-
   if (duration.minutes) expiry.setMinutes(expiry.getMinutes() + duration.minutes);
   if (duration.days) expiry.setDate(expiry.getDate() + duration.days);
   if (duration.months) expiry.setMonth(expiry.getMonth() + duration.months);
   if (duration.years) expiry.setFullYear(expiry.getFullYear() + duration.years);
-
 
   return expiry;
 }
@@ -145,7 +133,6 @@ async function checkAutoReply(text, userId) {
     const result = await pool.request()
       .input('userId', sql.NVarChar, userId)
       .query('SELECT TOP 1 * FROM AutoReplies WHERE userId = @userId AND isActive = 1');
-
 
     if (result.recordset.length > 0) {
       const rule = result.recordset[0];
@@ -170,20 +157,13 @@ app.post('/api/login', async (req, res) => {
 
     // Check Users table
     let result = await pool.request()
-
-    // Check Users table
-    let result = await pool.request()
       .input('username', sql.NVarChar, username)
       .input('password', sql.NVarChar, password)
       .query('SELECT * FROM Users WHERE username = @username AND password = @password');
 
-
     if (result.recordset.length > 0) {
       const user = result.recordset[0];
       const isLicenseValid = checkLicenseValidity(user);
-
-      return res.json({
-        success: true,
 
       return res.json({
         success: true,
@@ -198,38 +178,7 @@ app.post('/api/login', async (req, res) => {
           createdAt: user.createdAt
         },
         message: 'Login successful'
-        message: 'Login successful'
       });
-    }
-
-    // Check Agents table
-    result = await pool.request()
-      .input('username', sql.NVarChar, username)
-      .input('password', sql.NVarChar, password)
-      .query('SELECT * FROM Agents WHERE username = @username AND password = @password AND isActive = 1');
-
-    if (result.recordset.length > 0) {
-      const agent = result.recordset[0];
-      return res.json({
-        success: true,
-        token: 'mockup-jwt-token-agent-' + agent.id,
-        user: {
-          id: agent.id,
-          username: agent.username,
-          role: 'agent',
-          ownerId: agent.userId, // Link to the main user
-          licenseExpiry: null,
-          isLicenseValid: true,
-          createdAt: agent.createdAt
-        },
-        message: 'Login successful'
-      });
-    }
-
-    res.status(401).json({
-      success: false,
-      message: 'Invalid username or password'
-    });
     }
 
     // Check Agents table
@@ -270,31 +219,25 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
 
-
   if (!username || !password) {
     return res.status(400).json({ success: false, message: 'Username and password are required' });
   }
-
 
   if (username.length < 3 || password.length < 6) {
     return res.status(400).json({ success: false, message: 'Username >= 3 chars, Password >= 6 chars' });
   }
 
-
   try {
     const pool = await poolPromise;
-
 
     // Check existing user
     const checkResult = await pool.request()
       .input('username', sql.NVarChar, username)
       .query('SELECT id FROM Users WHERE username = @username');
 
-
     if (checkResult.recordset.length > 0) {
       return res.status(400).json({ success: false, message: 'Username already exists' });
     }
-
 
     // Insert new user
     const newUserId = Date.now().toString();
@@ -303,11 +246,8 @@ app.post('/api/register', async (req, res) => {
       .input('username', sql.NVarChar, username)
       .input('password', sql.NVarChar, password)
       .input('role', sql.NVarChar, 'user')
-      .query(`INSERT INTO Users (id, username, password, role, createdAt) 
+      .query(`INSERT INTO Users (id, username, password, role, createdAt)
               VALUES (@id, @username, @password, @role, GETDATE())`);
-
-    res.json({
-      success: true,
 
     res.json({
       success: true,
@@ -339,25 +279,22 @@ app.get('/api/messages/stream', (req, res) => {
 
 // Add Channel
 app.post('/api/channels', async (req, res) => {
-  const { channelSecret, channelAccessToken, channelName, userId } = req.body;
-
+  const { channelSecret, channelAccessToken, channelName, color, userId } = req.body;
 
   if (!channelSecret || !channelAccessToken || !userId) {
     return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
 
-
   try {
     const pool = await poolPromise;
     const newChannelId = Date.now().toString();
-
 
     await pool.request()
       .input('id', sql.NVarChar, newChannelId)
       .input('secret', sql.NVarChar, channelSecret)
       .input('token', sql.NVarChar, channelAccessToken)
       .input('name', sql.NVarChar, channelName || `LINE Channel ${newChannelId}`)
-      .input('color', sql.NVarChar, '#667eea')
+      .input('color', sql.NVarChar, color || '#06C755')
       .input('userId', sql.NVarChar, userId)
       .query(`INSERT INTO Channels (id, channelSecret, channelAccessToken, channelName, color, userId, createdAt)
               VALUES (@id, @secret, @token, @name, @color, @userId, GETDATE())`);
@@ -375,32 +312,10 @@ app.get('/api/channels', async (req, res) => {
 
   if (!userId && !agentId) {
     return res.status(400).json({ success: false, message: 'User ID or Agent ID is required' });
-  const { userId, agentId } = req.query;
-
-  if (!userId && !agentId) {
-    return res.status(400).json({ success: false, message: 'User ID or Agent ID is required' });
   }
-
 
   try {
     const pool = await poolPromise;
-    let result;
-
-    if (agentId) {
-      // Filter by agent assigned channels
-      result = await pool.request()
-        .input('agentId', sql.NVarChar, agentId)
-        .query(`SELECT c.* FROM Channels c
-                INNER JOIN AgentChannels ac ON c.id = ac.channelId
-                WHERE ac.agentId = @agentId
-                ORDER BY c.createdAt DESC`);
-    } else {
-      // Otherwise get all channels for the user
-      result = await pool.request()
-        .input('userId', sql.NVarChar, userId)
-        .query('SELECT * FROM Channels WHERE userId = @userId ORDER BY createdAt DESC');
-    }
-
     let result;
 
     if (agentId) {
@@ -434,8 +349,8 @@ app.put('/api/channels/:id', async (req, res) => {
     return res.status(400).json({ success: false, message: 'User ID is required' });
   }
 
-  if (!channelName) {
-    return res.status(400).json({ success: false, message: 'Channel name is required' });
+  if (!channelName && !color) {
+    return res.status(400).json({ success: false, message: 'At least channelName or color is required' });
   }
 
   try {
@@ -451,12 +366,23 @@ app.put('/api/channels/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Channel not found or no permission' });
     }
 
-    // Update
-    await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('channelName', sql.NVarChar, channelName)
-      .input('color', sql.NVarChar, color || '#667eea')
-      .query('UPDATE Channels SET channelName = @channelName, color = @color WHERE id = @id');
+    // Build dynamic update query
+    let updateFields = [];
+    const request = pool.request().input('id', sql.NVarChar, id);
+
+    if (channelName) {
+      updateFields.push('channelName = @channelName');
+      request.input('channelName', sql.NVarChar, channelName);
+    }
+
+    if (color) {
+      updateFields.push('color = @color');
+      request.input('color', sql.NVarChar, color);
+    }
+
+    if (updateFields.length > 0) {
+      await request.query(`UPDATE Channels SET ${updateFields.join(', ')} WHERE id = @id`);
+    }
 
     res.json({ success: true, message: 'Channel updated successfully' });
   } catch (error) {
@@ -1088,215 +1014,12 @@ app.post('/api/agents/:id/channels', async (req, res) => {
   }
 });
 
-// ===== Agent Management =====
-
-// Get Agents
-app.get('/api/agents', async (req, res) => {
-  const { userId } = req.query;
-
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
-  }
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT * FROM Agents WHERE userId = @userId ORDER BY createdAt DESC');
-
-    res.json({ success: true, agents: result.recordset });
-  } catch (error) {
-    console.error('Get agents error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Create Agent
-app.post('/api/agents', async (req, res) => {
-  const { name, username, password, userId } = req.body;
-
-  if (!username || !password || !userId) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Check if username already exists in Users or Agents
-    const checkUser = await pool.request()
-      .input('username', sql.NVarChar, username)
-      .query('SELECT id FROM Users WHERE username = @username');
-
-    const checkAgent = await pool.request()
-      .input('username', sql.NVarChar, username)
-      .query('SELECT id FROM Agents WHERE username = @username');
-
-    if (checkUser.recordset.length > 0 || checkAgent.recordset.length > 0) {
-      return res.status(400).json({ success: false, message: 'Username already exists' });
-    }
-
-    const newAgentId = Date.now().toString();
-    await pool.request()
-      .input('id', sql.NVarChar, newAgentId)
-      .input('name', sql.NVarChar, name || null)
-      .input('username', sql.NVarChar, username)
-      .input('password', sql.NVarChar, password)
-      .input('userId', sql.NVarChar, userId)
-      .query(`INSERT INTO Agents (id, name, username, password, userId, createdAt, isActive)
-              VALUES (@id, @name, @username, @password, @userId, GETDATE(), 1)`);
-
-    res.json({ success: true, message: 'Agent created successfully', agent: { id: newAgentId } });
-  } catch (error) {
-    console.error('Create agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Update Agent
-app.put('/api/agents/:id', async (req, res) => {
-  const { id } = req.params;
-  const { name, username, password, isActive, userId } = req.body;
-
-  try {
-    const pool = await poolPromise;
-
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
-    }
-
-    // Build update query
-    let updateFields = [];
-    const request = pool.request().input('id', sql.NVarChar, id);
-
-    if (name !== undefined) {
-      updateFields.push('name = @name');
-      request.input('name', sql.NVarChar, name);
-    }
-    if (username !== undefined) {
-      updateFields.push('username = @username');
-      request.input('username', sql.NVarChar, username);
-    }
-    if (password) {
-      updateFields.push('password = @password');
-      request.input('password', sql.NVarChar, password);
-    }
-    if (isActive !== undefined) {
-      updateFields.push('isActive = @isActive');
-      request.input('isActive', sql.Bit, isActive ? 1 : 0);
-    }
-
-    if (updateFields.length > 0) {
-      await request.query(`UPDATE Agents SET ${updateFields.join(', ')} WHERE id = @id`);
-    }
-
-    res.json({ success: true, message: 'Agent updated successfully' });
-  } catch (error) {
-    console.error('Update agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Delete Agent
-app.delete('/api/agents/:id', async (req, res) => {
-  const { id } = req.params;
-  const { userId } = req.query;
-
-  try {
-    const pool = await poolPromise;
-
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
-    }
-
-    await pool.request()
-      .input('id', sql.NVarChar, id)
-      .query('DELETE FROM Agents WHERE id = @id');
-
-    res.json({ success: true, message: 'Agent deleted successfully' });
-  } catch (error) {
-    console.error('Delete agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Get Assigned Channels for Agent
-app.get('/api/agents/:id/channels', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('agentId', sql.NVarChar, id)
-      .query('SELECT channelId FROM AgentChannels WHERE agentId = @agentId');
-
-    res.json({ success: true, channelIds: result.recordset.map(r => r.channelId) });
-  } catch (error) {
-    console.error('Get agent channels error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Update Assigned Channels for Agent
-app.post('/api/agents/:id/channels', async (req, res) => {
-  const { id } = req.params;
-  const { channelIds, userId } = req.body;
-
-  try {
-    const pool = await poolPromise;
-
-    // Check if the agent belongs to the user
-    const checkAgent = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
-
-    if (checkAgent.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found' });
-    }
-
-    // Delete existing assignments
-    await pool.request()
-      .input('agentId', sql.NVarChar, id)
-      .query('DELETE FROM AgentChannels WHERE agentId = @agentId');
-
-    // Add new assignments
-    if (channelIds && channelIds.length > 0) {
-      for (const channelId of channelIds) {
-        await pool.request()
-          .input('agentId', sql.NVarChar, id)
-          .input('channelId', sql.NVarChar, channelId)
-          .query('INSERT INTO AgentChannels (agentId, channelId) VALUES (@agentId, @channelId)');
-      }
-    }
-
-    res.json({ success: true, message: 'Channels assigned successfully' });
-  } catch (error) {
-    console.error('Assign channels error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
 // Upload Image
 app.post('/api/upload/image', upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
-
-    res.json({
-      success: true,
 
     res.json({
       success: true,
@@ -1313,24 +1036,21 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
 app.post('/api/messages/mark-read', async (req, res) => {
   const { userId, channelId } = req.body;
 
-
   try {
     const pool = await poolPromise;
-
 
     if (channelId) {
       await pool.request()
         .input('userId', sql.NVarChar, userId)
         .input('channelId', sql.NVarChar, channelId)
-        .query(`UPDATE Messages SET isRead = 1 
+        .query(`UPDATE Messages SET isRead = 1
                 WHERE userId = @userId AND channelId = @channelId AND type = 'received' AND isRead = 0`);
     } else {
       await pool.request()
         .input('userId', sql.NVarChar, userId)
-        .query(`UPDATE Messages SET isRead = 1 
+        .query(`UPDATE Messages SET isRead = 1
                 WHERE userId = @userId AND type = 'received' AND isRead = 0`);
     }
-
 
     res.json({ success: true, message: 'Messages marked as read' });
   } catch (error) {
@@ -1345,11 +1065,9 @@ app.post('/api/messages/mark-read', async (req, res) => {
 app.get('/api/groups', async (req, res) => {
   const { userId } = req.query;
 
-
   if (!userId) {
     return res.status(400).json({ success: false, message: 'User ID is required' });
   }
-
 
   try {
     const pool = await poolPromise;
@@ -1376,12 +1094,10 @@ app.get('/api/groups', async (req, res) => {
               WHERE g.userId = @userId
               ORDER BY g.updatedAt DESC`);
 
-
     const groups = result.recordset.map(g => ({
       ...g,
       conversations: g.ConversationsJson ? JSON.parse(g.ConversationsJson) : []
     }));
-
 
     res.json({ success: true, groups });
   } catch (error) {
@@ -1394,11 +1110,9 @@ app.get('/api/groups', async (req, res) => {
 app.post('/api/groups', async (req, res) => {
   const { name, conversations, userId } = req.body;
 
-
   if (!name || !conversations || !userId) {
     return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
-
 
   try {
     const pool = await poolPromise;
@@ -1416,7 +1130,6 @@ app.post('/api/groups', async (req, res) => {
 
     const newGroupId = Date.now().toString();
 
-
     // Insert group
     await pool.request()
       .input('id', sql.NVarChar, newGroupId)
@@ -1424,7 +1137,6 @@ app.post('/api/groups', async (req, res) => {
       .input('userId', sql.NVarChar, ownerIdToUse)
       .query(`INSERT INTO ConversationGroups (id, name, userId, createdAt, updatedAt)
               VALUES (@id, @name, @userId, GETDATE(), GETDATE())`);
-
 
     // Insert conversations
     for (const conv of conversations) {
@@ -1435,7 +1147,6 @@ app.post('/api/groups', async (req, res) => {
         .query(`INSERT INTO GroupConversations (groupId, userId, channelId)
                 VALUES (@groupId, @userId, @channelId)`);
     }
-
 
     res.json({ success: true, message: 'Group created successfully', group: { id: newGroupId } });
   } catch (error) {
@@ -1449,7 +1160,6 @@ app.put('/api/groups/:id', async (req, res) => {
   const { id } = req.params;
   const { name, conversations, userId } = req.body;
 
-
   try {
     const pool = await poolPromise;
 
@@ -1470,11 +1180,9 @@ app.put('/api/groups/:id', async (req, res) => {
       .input('userId', sql.NVarChar, ownerIdToUse)
       .query('SELECT id FROM ConversationGroups WHERE id = @id AND userId = @userId');
 
-
     if (checkResult.recordset.length === 0) {
       return res.status(404).json({ success: false, message: 'Group not found or no permission' });
     }
-
 
     // Update group
     if (name) {
@@ -1484,13 +1192,11 @@ app.put('/api/groups/:id', async (req, res) => {
         .query(`UPDATE ConversationGroups SET name = @name, updatedAt = GETDATE() WHERE id = @id`);
     }
 
-
     // Update conversations
     if (conversations) {
       await pool.request()
         .input('groupId', sql.NVarChar, id)
         .query('DELETE FROM GroupConversations WHERE groupId = @groupId');
-
 
       for (const conv of conversations) {
         await pool.request()
@@ -1501,7 +1207,6 @@ app.put('/api/groups/:id', async (req, res) => {
                   VALUES (@groupId, @userId, @channelId)`);
       }
     }
-
 
     res.json({ success: true, message: 'Group updated successfully' });
   } catch (error) {
@@ -1515,7 +1220,6 @@ app.delete('/api/groups/:id', async (req, res) => {
   const { id } = req.params;
   const { userId } = req.query;
 
-
   try {
     const pool = await poolPromise;
 
@@ -1536,17 +1240,14 @@ app.delete('/api/groups/:id', async (req, res) => {
       .input('userId', sql.NVarChar, ownerIdToUse)
       .query('SELECT id FROM ConversationGroups WHERE id = @id AND userId = @userId');
 
-
     if (checkResult.recordset.length === 0) {
       return res.status(404).json({ success: false, message: 'Group not found or no permission' });
     }
-
 
     // Delete (CASCADE will delete GroupConversations)
     await pool.request()
       .input('id', sql.NVarChar, id)
       .query('DELETE FROM ConversationGroups WHERE id = @id');
-
 
     res.json({ success: true, message: 'Group deleted successfully' });
   } catch (error) {
@@ -1700,58 +1401,41 @@ app.delete('/api/licenses/delete/:id', async (req, res) => {
 app.post('/api/license/activate', async (req, res) => {
   const { licenseKey, userId } = req.body;
 
-
   if (!licenseKey || !userId) {
-    return res.status(400).json({
-      success: false,
-      message: 'License key and user ID are required'
     return res.status(400).json({
       success: false,
       message: 'License key and user ID are required'
     });
   }
 
-
   try {
     const pool = await poolPromise;
-
 
     // Get user
     const userResult = await pool.request()
       .input('userId', sql.NVarChar, userId)
       .query('SELECT * FROM Users WHERE id = @userId');
 
-
     if (userResult.recordset.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-
 
     // Get license
     const licenseResult = await pool.request()
       .input('key', sql.NVarChar, licenseKey.trim())
       .query('SELECT * FROM Licenses WHERE licenseKey = @key');
 
-
     if (licenseResult.recordset.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'License Key ไม่ถูกต้องหรือไม่มีในระบบ'
       return res.status(404).json({
         success: false,
         message: 'License Key ไม่ถูกต้องหรือไม่มีในระบบ'
       });
     }
 
-
     const license = licenseResult.recordset[0];
-
 
     // ✅ ตรวจสอบว่า License มี status = 'active' แล้วหรือไม่
     if (license.status === 'active') {
@@ -1760,37 +1444,25 @@ app.post('/api/license/activate', async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'License Key นี้ถูกใช้งานโดยผู้ใช้อื่นแล้ว ไม่สามารถใช้ซ้ำได้'
-        return res.status(400).json({
-          success: false,
-          message: 'License Key นี้ถูกใช้งานโดยผู้ใช้อื่นแล้ว ไม่สามารถใช้ซ้ำได้'
         });
       }
-
 
       // ถ้า License ถูกใช้โดยคนเดียวกัน ก็ไม่ให้ใช้ซ้ำเช่นกัน
       if (license.activatedBy === userId) {
         return res.status(400).json({
           success: false,
           message: 'คุณได้ใช้งาน License Key นี้ไปแล้ว ไม่สามารถใช้ซ้ำได้'
-        return res.status(400).json({
-          success: false,
-          message: 'คุณได้ใช้งาน License Key นี้ไปแล้ว ไม่สามารถใช้ซ้ำได้'
         });
       }
     }
-
 
     // ✅ ตรวจสอบว่า License หมดอายุหรือยัง (สำหรับ License ที่เคยใช้แล้ว)
     if (license.expiresAt && new Date(license.expiresAt) < new Date()) {
       return res.status(400).json({
         success: false,
         message: 'License Key นี้หมดอายุแล้ว'
-      return res.status(400).json({
-        success: false,
-        message: 'License Key นี้หมดอายุแล้ว'
       });
     }
-
 
     // Calculate new expiry date
     const duration = {
@@ -1801,30 +1473,27 @@ app.post('/api/license/activate', async (req, res) => {
     };
     const expiryDate = calculateExpiryDate(duration);
 
-
     // Update license to active status
     await pool.request()
       .input('key', sql.NVarChar, licenseKey.trim())
       .input('userId', sql.NVarChar, userId)
       .input('expiresAt', sql.DateTime, expiryDate)
-      .query(`UPDATE Licenses 
-              SET status = 'active', 
-                  activatedBy = @userId, 
-                  activatedAt = GETDATE(), 
-                  expiresAt = @expiresAt 
+      .query(`UPDATE Licenses
+              SET status = 'active',
+                  activatedBy = @userId,
+                  activatedAt = GETDATE(),
+                  expiresAt = @expiresAt
               WHERE licenseKey = @key`);
-
 
     // Update user's license info
     await pool.request()
       .input('userId', sql.NVarChar, userId)
       .input('key', sql.NVarChar, licenseKey.trim())
       .input('expiry', sql.DateTime, expiryDate)
-      .query(`UPDATE Users 
-              SET licenseKey = @key, 
-                  licenseExpiry = @expiry 
+      .query(`UPDATE Users
+              SET licenseKey = @key,
+                  licenseExpiry = @expiry
               WHERE id = @userId`);
-
 
     console.log(`✅ License activated: ${licenseKey} for user ${userId}`);
 
@@ -1832,19 +1501,10 @@ app.post('/api/license/activate', async (req, res) => {
       success: true,
       message: 'เปิดใช้งาน License สำเร็จ',
       expiresAt: expiryDate
-
-    res.json({
-      success: true,
-      message: 'เปิดใช้งาน License สำเร็จ',
-      expiresAt: expiryDate
     });
-
 
   } catch (error) {
     console.error('❌ Activate license error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'เกิดข้อผิดพลาดของระบบ'
     res.status(500).json({
       success: false,
       message: 'เกิดข้อผิดพลาดของระบบ'
@@ -2347,210 +2007,9 @@ app.patch('/api/auto-replies/:id/toggle', async (req, res) => {
 
     console.log(`✓ Auto reply toggled: ${id} -> ${newStatus ? 'active' : 'inactive'}`);
 
-
     res.json({ success: true, message: 'Auto reply status toggled', isActive: newStatus });
   } catch (error) {
     console.error('Toggle auto reply error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// ===== Agent Management =====
-
-// Get Agents
-app.get('/api/agents', async (req, res) => {
-  const { userId } = req.query;
-
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
-  }
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT * FROM Agents WHERE userId = @userId ORDER BY createdAt DESC');
-
-    res.json({ success: true, agents: result.recordset });
-  } catch (error) {
-    console.error('Get agents error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Create Agent
-app.post('/api/agents', async (req, res) => {
-  const { name, username, password, userId } = req.body;
-
-  if (!username || !password || !userId) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Check if username already exists in Users or Agents
-    const checkUser = await pool.request()
-      .input('username', sql.NVarChar, username)
-      .query('SELECT id FROM Users WHERE username = @username');
-
-    const checkAgent = await pool.request()
-      .input('username', sql.NVarChar, username)
-      .query('SELECT id FROM Agents WHERE username = @username');
-
-    if (checkUser.recordset.length > 0 || checkAgent.recordset.length > 0) {
-      return res.status(400).json({ success: false, message: 'Username already exists' });
-    }
-
-    const newAgentId = Date.now().toString();
-    await pool.request()
-      .input('id', sql.NVarChar, newAgentId)
-      .input('name', sql.NVarChar, name || null)
-      .input('username', sql.NVarChar, username)
-      .input('password', sql.NVarChar, password)
-      .input('userId', sql.NVarChar, userId)
-      .query(`INSERT INTO Agents (id, name, username, password, userId, createdAt, isActive)
-              VALUES (@id, @name, @username, @password, @userId, GETDATE(), 1)`);
-
-    res.json({ success: true, message: 'Agent created successfully', agent: { id: newAgentId } });
-  } catch (error) {
-    console.error('Create agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Update Agent
-app.put('/api/agents/:id', async (req, res) => {
-  const { id } = req.params;
-  const { name, username, password, isActive, userId } = req.body;
-
-  try {
-    const pool = await poolPromise;
-
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
-    }
-
-    // Build update query
-    let updateFields = [];
-    const request = pool.request().input('id', sql.NVarChar, id);
-
-    if (name !== undefined) {
-      updateFields.push('name = @name');
-      request.input('name', sql.NVarChar, name);
-    }
-    if (username !== undefined) {
-      updateFields.push('username = @username');
-      request.input('username', sql.NVarChar, username);
-    }
-    if (password) {
-      updateFields.push('password = @password');
-      request.input('password', sql.NVarChar, password);
-    }
-    if (isActive !== undefined) {
-      updateFields.push('isActive = @isActive');
-      request.input('isActive', sql.Bit, isActive ? 1 : 0);
-    }
-
-    if (updateFields.length > 0) {
-      await request.query(`UPDATE Agents SET ${updateFields.join(', ')} WHERE id = @id`);
-    }
-
-    res.json({ success: true, message: 'Agent updated successfully' });
-  } catch (error) {
-    console.error('Update agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Delete Agent
-app.delete('/api/agents/:id', async (req, res) => {
-  const { id } = req.params;
-  const { userId } = req.query;
-
-  try {
-    const pool = await poolPromise;
-
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
-    }
-
-    await pool.request()
-      .input('id', sql.NVarChar, id)
-      .query('DELETE FROM Agents WHERE id = @id');
-
-    res.json({ success: true, message: 'Agent deleted successfully' });
-  } catch (error) {
-    console.error('Delete agent error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Get Assigned Channels for Agent
-app.get('/api/agents/:id/channels', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('agentId', sql.NVarChar, id)
-      .query('SELECT channelId FROM AgentChannels WHERE agentId = @agentId');
-
-    res.json({ success: true, channelIds: result.recordset.map(r => r.channelId) });
-  } catch (error) {
-    console.error('Get agent channels error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Update Assigned Channels for Agent
-app.post('/api/agents/:id/channels', async (req, res) => {
-  const { id } = req.params;
-  const { channelIds, userId } = req.body;
-
-  try {
-    const pool = await poolPromise;
-
-    // Check if the agent belongs to the user
-    const checkAgent = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
-
-    if (checkAgent.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Agent not found' });
-    }
-
-    // Delete existing assignments
-    await pool.request()
-      .input('agentId', sql.NVarChar, id)
-      .query('DELETE FROM AgentChannels WHERE agentId = @agentId');
-
-    // Add new assignments
-    if (channelIds && channelIds.length > 0) {
-      for (const channelId of channelIds) {
-        await pool.request()
-          .input('agentId', sql.NVarChar, id)
-          .input('channelId', sql.NVarChar, channelId)
-          .query('INSERT INTO AgentChannels (agentId, channelId) VALUES (@agentId, @channelId)');
-      }
-    }
-
-    res.json({ success: true, message: 'Channels assigned successfully' });
-  } catch (error) {
-    console.error('Assign channels error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
