@@ -85,7 +85,9 @@ function Chat({ currentUser }) {
 
   const fetchChannels = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/channels?userId=${currentUser.id}`);
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const response = await fetch(`http://localhost:5000/api/channels?${param}`);
       const data = await response.json();
       if (data.success) {
         setChannels(data.channels);
@@ -97,7 +99,9 @@ function Chat({ currentUser }) {
 
   const fetchMessages = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/messages?userId=${currentUser.id}`);
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const response = await fetch(`http://localhost:5000/api/messages?${param}`);
       const data = await response.json();
       if (data.success) {
         setMessages(data.messages);

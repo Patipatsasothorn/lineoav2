@@ -154,7 +154,9 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
+
+    // Check Users table
+    let result = await pool.request()
       .input('username', sql.NVarChar, username)
       .input('password', sql.NVarChar, password)
       .query('SELECT * FROM Users WHERE username = @username AND password = @password');
@@ -163,7 +165,7 @@ app.post('/api/login', async (req, res) => {
       const user = result.recordset[0];
       const isLicenseValid = checkLicenseValidity(user);
 
-      res.json({
+      return res.json({
         success: true,
         token: 'mockup-jwt-token-' + user.id,
         user: {
@@ -177,12 +179,36 @@ app.post('/api/login', async (req, res) => {
         },
         message: 'Login successful'
       });
-    } else {
-      res.status(401).json({
-        success: false,
-        message: 'Invalid username or password'
+    }
+
+    // Check Agents table
+    result = await pool.request()
+      .input('username', sql.NVarChar, username)
+      .input('password', sql.NVarChar, password)
+      .query('SELECT * FROM Agents WHERE username = @username AND password = @password AND isActive = 1');
+
+    if (result.recordset.length > 0) {
+      const agent = result.recordset[0];
+      return res.json({
+        success: true,
+        token: 'mockup-jwt-token-agent-' + agent.id,
+        user: {
+          id: agent.id,
+          username: agent.username,
+          role: 'agent',
+          ownerId: agent.userId, // Link to the main user
+          licenseExpiry: null,
+          isLicenseValid: true,
+          createdAt: agent.createdAt
+        },
+        message: 'Login successful'
       });
     }
+
+    res.status(401).json({
+      success: false,
+      message: 'Invalid username or password'
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -282,17 +308,30 @@ app.post('/api/channels', async (req, res) => {
 
 // Get Channels
 app.get('/api/channels', async (req, res) => {
-  const { userId } = req.query;
+  const { userId, agentId } = req.query;
 
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
+  if (!userId && !agentId) {
+    return res.status(400).json({ success: false, message: 'User ID or Agent ID is required' });
   }
 
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT * FROM Channels WHERE userId = @userId ORDER BY createdAt DESC');
+    let result;
+
+    if (agentId) {
+      // Filter by agent assigned channels
+      result = await pool.request()
+        .input('agentId', sql.NVarChar, agentId)
+        .query(`SELECT c.* FROM Channels c
+                INNER JOIN AgentChannels ac ON c.id = ac.channelId
+                WHERE ac.agentId = @agentId
+                ORDER BY c.createdAt DESC`);
+    } else {
+      // Otherwise get all channels for the user
+      result = await pool.request()
+        .input('userId', sql.NVarChar, userId)
+        .query('SELECT * FROM Channels WHERE userId = @userId ORDER BY createdAt DESC');
+    }
 
     res.json({ success: true, channels: result.recordset });
   } catch (error) {
@@ -629,20 +668,33 @@ app.post('/api/pinned-conversations/toggle', async (req, res) => {
 
 // Get Messages
 app.get('/api/messages', async (req, res) => {
-  const { userId } = req.query;
+  const { userId, agentId } = req.query;
 
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
+  if (!userId && !agentId) {
+    return res.status(400).json({ success: false, message: 'User ID or Agent ID is required' });
   }
 
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query(`SELECT m.* FROM Messages m
-              INNER JOIN Channels c ON m.channelId = c.id
-              WHERE c.userId = @userId
-              ORDER BY m.timestamp ASC`);
+    let result;
+
+    if (agentId) {
+      // Filter by agent assigned channels
+      result = await pool.request()
+        .input('agentId', sql.NVarChar, agentId)
+        .query(`SELECT m.* FROM Messages m
+                INNER JOIN AgentChannels ac ON m.channelId = ac.channelId
+                WHERE ac.agentId = @agentId
+                ORDER BY m.timestamp ASC`);
+    } else {
+      // Filter by user owned channels
+      result = await pool.request()
+        .input('userId', sql.NVarChar, userId)
+        .query(`SELECT m.* FROM Messages m
+                INNER JOIN Channels c ON m.channelId = c.id
+                WHERE c.userId = @userId
+                ORDER BY m.timestamp ASC`);
+    }
 
     res.json({ success: true, messages: result.recordset });
   } catch (error) {
@@ -876,6 +928,206 @@ app.post('/api/messages/send', async (req, res) => {
   } catch (error) {
     console.error('Send message error:', error);
     res.status(500).json({ success: false, message: 'Failed to send message' });
+  }
+});
+
+// ===== Agent Management =====
+
+// Get Agents
+app.get('/api/agents', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).json({ success: false, message: 'User ID is required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT * FROM Agents WHERE userId = @userId ORDER BY createdAt DESC');
+
+    res.json({ success: true, agents: result.recordset });
+  } catch (error) {
+    console.error('Get agents error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Create Agent
+app.post('/api/agents', async (req, res) => {
+  const { name, username, password, userId } = req.body;
+
+  if (!username || !password || !userId) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Check if username already exists in Users or Agents
+    const checkUser = await pool.request()
+      .input('username', sql.NVarChar, username)
+      .query('SELECT id FROM Users WHERE username = @username');
+
+    const checkAgent = await pool.request()
+      .input('username', sql.NVarChar, username)
+      .query('SELECT id FROM Agents WHERE username = @username');
+
+    if (checkUser.recordset.length > 0 || checkAgent.recordset.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username already exists' });
+    }
+
+    const newAgentId = Date.now().toString();
+    await pool.request()
+      .input('id', sql.NVarChar, newAgentId)
+      .input('name', sql.NVarChar, name || null)
+      .input('username', sql.NVarChar, username)
+      .input('password', sql.NVarChar, password)
+      .input('userId', sql.NVarChar, userId)
+      .query(`INSERT INTO Agents (id, name, username, password, userId, createdAt, isActive)
+              VALUES (@id, @name, @username, @password, @userId, GETDATE(), 1)`);
+
+    res.json({ success: true, message: 'Agent created successfully', agent: { id: newAgentId } });
+  } catch (error) {
+    console.error('Create agent error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update Agent
+app.put('/api/agents/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, username, password, isActive, userId } = req.body;
+
+  try {
+    const pool = await poolPromise;
+
+    // Check ownership
+    const checkResult = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
+    }
+
+    // Build update query
+    let updateFields = [];
+    const request = pool.request().input('id', sql.NVarChar, id);
+
+    if (name !== undefined) {
+      updateFields.push('name = @name');
+      request.input('name', sql.NVarChar, name);
+    }
+    if (username !== undefined) {
+      updateFields.push('username = @username');
+      request.input('username', sql.NVarChar, username);
+    }
+    if (password) {
+      updateFields.push('password = @password');
+      request.input('password', sql.NVarChar, password);
+    }
+    if (isActive !== undefined) {
+      updateFields.push('isActive = @isActive');
+      request.input('isActive', sql.Bit, isActive ? 1 : 0);
+    }
+
+    if (updateFields.length > 0) {
+      await request.query(`UPDATE Agents SET ${updateFields.join(', ')} WHERE id = @id`);
+    }
+
+    res.json({ success: true, message: 'Agent updated successfully' });
+  } catch (error) {
+    console.error('Update agent error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Delete Agent
+app.delete('/api/agents/:id', async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+
+  try {
+    const pool = await poolPromise;
+
+    // Check ownership
+    const checkResult = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('DELETE FROM Agents WHERE id = @id');
+
+    res.json({ success: true, message: 'Agent deleted successfully' });
+  } catch (error) {
+    console.error('Delete agent error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get Assigned Channels for Agent
+app.get('/api/agents/:id/channels', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('agentId', sql.NVarChar, id)
+      .query('SELECT channelId FROM AgentChannels WHERE agentId = @agentId');
+
+    res.json({ success: true, channelIds: result.recordset.map(r => r.channelId) });
+  } catch (error) {
+    console.error('Get agent channels error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update Assigned Channels for Agent
+app.post('/api/agents/:id/channels', async (req, res) => {
+  const { id } = req.params;
+  const { channelIds, userId } = req.body;
+
+  try {
+    const pool = await poolPromise;
+
+    // Check if the agent belongs to the user
+    const checkAgent = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
+
+    if (checkAgent.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    // Delete existing assignments
+    await pool.request()
+      .input('agentId', sql.NVarChar, id)
+      .query('DELETE FROM AgentChannels WHERE agentId = @agentId');
+
+    // Add new assignments
+    if (channelIds && channelIds.length > 0) {
+      for (const channelId of channelIds) {
+        await pool.request()
+          .input('agentId', sql.NVarChar, id)
+          .input('channelId', sql.NVarChar, channelId)
+          .query('INSERT INTO AgentChannels (agentId, channelId) VALUES (@agentId, @channelId)');
+      }
+    }
+
+    res.json({ success: true, message: 'Channels assigned successfully' });
+  } catch (error) {
+    console.error('Assign channels error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
@@ -1713,6 +1965,206 @@ app.patch('/api/auto-replies/:id/toggle', async (req, res) => {
     res.json({ success: true, message: 'Auto reply status toggled', isActive: newStatus });
   } catch (error) {
     console.error('Toggle auto reply error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ===== Agent Management =====
+
+// Get Agents
+app.get('/api/agents', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).json({ success: false, message: 'User ID is required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT * FROM Agents WHERE userId = @userId ORDER BY createdAt DESC');
+
+    res.json({ success: true, agents: result.recordset });
+  } catch (error) {
+    console.error('Get agents error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Create Agent
+app.post('/api/agents', async (req, res) => {
+  const { name, username, password, userId } = req.body;
+
+  if (!username || !password || !userId) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Check if username already exists in Users or Agents
+    const checkUser = await pool.request()
+      .input('username', sql.NVarChar, username)
+      .query('SELECT id FROM Users WHERE username = @username');
+
+    const checkAgent = await pool.request()
+      .input('username', sql.NVarChar, username)
+      .query('SELECT id FROM Agents WHERE username = @username');
+
+    if (checkUser.recordset.length > 0 || checkAgent.recordset.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username already exists' });
+    }
+
+    const newAgentId = Date.now().toString();
+    await pool.request()
+      .input('id', sql.NVarChar, newAgentId)
+      .input('name', sql.NVarChar, name || null)
+      .input('username', sql.NVarChar, username)
+      .input('password', sql.NVarChar, password)
+      .input('userId', sql.NVarChar, userId)
+      .query(`INSERT INTO Agents (id, name, username, password, userId, createdAt, isActive)
+              VALUES (@id, @name, @username, @password, @userId, GETDATE(), 1)`);
+
+    res.json({ success: true, message: 'Agent created successfully', agent: { id: newAgentId } });
+  } catch (error) {
+    console.error('Create agent error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update Agent
+app.put('/api/agents/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, username, password, isActive, userId } = req.body;
+
+  try {
+    const pool = await poolPromise;
+
+    // Check ownership
+    const checkResult = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
+    }
+
+    // Build update query
+    let updateFields = [];
+    const request = pool.request().input('id', sql.NVarChar, id);
+
+    if (name !== undefined) {
+      updateFields.push('name = @name');
+      request.input('name', sql.NVarChar, name);
+    }
+    if (username !== undefined) {
+      updateFields.push('username = @username');
+      request.input('username', sql.NVarChar, username);
+    }
+    if (password) {
+      updateFields.push('password = @password');
+      request.input('password', sql.NVarChar, password);
+    }
+    if (isActive !== undefined) {
+      updateFields.push('isActive = @isActive');
+      request.input('isActive', sql.Bit, isActive ? 1 : 0);
+    }
+
+    if (updateFields.length > 0) {
+      await request.query(`UPDATE Agents SET ${updateFields.join(', ')} WHERE id = @id`);
+    }
+
+    res.json({ success: true, message: 'Agent updated successfully' });
+  } catch (error) {
+    console.error('Update agent error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Delete Agent
+app.delete('/api/agents/:id', async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+
+  try {
+    const pool = await poolPromise;
+
+    // Check ownership
+    const checkResult = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Agent not found or no permission' });
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('DELETE FROM Agents WHERE id = @id');
+
+    res.json({ success: true, message: 'Agent deleted successfully' });
+  } catch (error) {
+    console.error('Delete agent error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get Assigned Channels for Agent
+app.get('/api/agents/:id/channels', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('agentId', sql.NVarChar, id)
+      .query('SELECT channelId FROM AgentChannels WHERE agentId = @agentId');
+
+    res.json({ success: true, channelIds: result.recordset.map(r => r.channelId) });
+  } catch (error) {
+    console.error('Get agent channels error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update Assigned Channels for Agent
+app.post('/api/agents/:id/channels', async (req, res) => {
+  const { id } = req.params;
+  const { channelIds, userId } = req.body;
+
+  try {
+    const pool = await poolPromise;
+
+    // Check if the agent belongs to the user
+    const checkAgent = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Agents WHERE id = @id AND userId = @userId');
+
+    if (checkAgent.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Agent not found' });
+    }
+
+    // Delete existing assignments
+    await pool.request()
+      .input('agentId', sql.NVarChar, id)
+      .query('DELETE FROM AgentChannels WHERE agentId = @agentId');
+
+    // Add new assignments
+    if (channelIds && channelIds.length > 0) {
+      for (const channelId of channelIds) {
+        await pool.request()
+          .input('agentId', sql.NVarChar, id)
+          .input('channelId', sql.NVarChar, channelId)
+          .query('INSERT INTO AgentChannels (agentId, channelId) VALUES (@agentId, @channelId)');
+      }
+    }
+
+    res.json({ success: true, message: 'Channels assigned successfully' });
+  } catch (error) {
+    console.error('Assign channels error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
