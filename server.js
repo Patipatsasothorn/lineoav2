@@ -1059,6 +1059,370 @@ app.post('/api/messages/mark-read', async (req, res) => {
   }
 });
 
+// ===== Archived Conversations =====
+
+// Archive Conversation (จบแชท)
+app.post('/api/conversations/archive', async (req, res) => {
+  const { userId, channelId, currentUserId, note } = req.body;
+
+  console.log('📦 [Archive] Request body:', req.body);
+  console.log('📦 [Archive] userId:', userId, 'channelId:', channelId, 'currentUserId:', currentUserId);
+
+  if (!userId || !channelId || !currentUserId) {
+    console.error('❌ [Archive] Missing required fields');
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields',
+      received: { userId, channelId, currentUserId }
+    });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // ดึงข้อความทั้งหมดของ conversation นี้
+    const messagesResult = await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .input('channelId', sql.NVarChar, channelId)
+      .query(`SELECT * FROM Messages WHERE userId = @userId AND channelId = @channelId ORDER BY timestamp ASC`);
+
+    if (messagesResult.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // สร้าง conversationKey
+    const conversationKey = `${userId}_${channelId}`;
+
+    // ตรวจสอบว่ามีการเก็บถาวรอยู่แล้วหรือไม่
+    const existingArchive = await pool.request()
+      .input('conversationKey', sql.NVarChar, conversationKey)
+      .input('currentUserId', sql.NVarChar, currentUserId)
+      .query(`SELECT id FROM ArchivedConversations
+              WHERE conversationKey = @conversationKey AND ownerId = @currentUserId`);
+
+    if (existingArchive.recordset.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Conversation already archived'
+      });
+    }
+
+    // ดึงข้อมูล channel name
+    const channelInfo = await pool.request()
+      .input('channelId', sql.NVarChar, channelId)
+      .query(`SELECT channelName FROM Channels WHERE id = @channelId`);
+
+    const channelName = channelInfo.recordset.length > 0 ? channelInfo.recordset[0].channelName : 'Unknown Channel';
+
+    // ดึง userName จากข้อความแรก
+    const userName = messagesResult.recordset.length > 0 ? messagesResult.recordset[0].userName : null;
+
+    console.log('📦 [Archive] userName:', userName);
+    console.log('📦 [Archive] channelName:', channelName);
+
+    // บันทึกการเก็บถาวรและรับ archiveId
+    const archiveResult = await pool.request()
+      .input('conversationKey', sql.NVarChar, conversationKey)
+      .input('userId', sql.NVarChar, userId)
+      .input('userName', sql.NVarChar, userName)
+      .input('channelId', sql.NVarChar, channelId)
+      .input('channelName', sql.NVarChar, channelName)
+      .input('messageCount', sql.Int, messagesResult.recordset.length)
+      .input('ownerId', sql.NVarChar, currentUserId)
+      .input('note', sql.NVarChar, note || null)
+      .query(`INSERT INTO ArchivedConversations
+              (conversationKey, userId, userName, channelId, channelName, messageCount, ownerId, note, archivedAt)
+              OUTPUT INSERTED.id
+              VALUES (@conversationKey, @userId, @userName, @channelId, @channelName, @messageCount, @ownerId, @note, GETDATE())`);
+
+    const archiveId = archiveResult.recordset[0].id;
+
+    // คัดลอกข้อความทั้งหมดไปยัง ArchivedMessages
+    for (const msg of messagesResult.recordset) {
+      await pool.request()
+        .input('archiveId', sql.Int, archiveId)
+        .input('userId', sql.NVarChar, msg.userId)
+        .input('userName', sql.NVarChar, msg.userName)
+        .input('channelId', sql.NVarChar, msg.channelId)
+        .input('text', sql.NVarChar, msg.text)
+        .input('type', sql.NVarChar, msg.type)
+        .input('timestamp', sql.BigInt, msg.timestamp)
+        .input('isRead', sql.Bit, msg.isRead)
+        .input('messageType', sql.NVarChar, msg.messageType)
+        .input('imageUrl', sql.NVarChar, msg.imageUrl)
+        .input('stickerId', sql.NVarChar, msg.stickerId)
+        .input('stickerPackageId', sql.NVarChar, msg.stickerPackageId)
+        .query(`INSERT INTO ArchivedMessages
+                (archiveId, userId, userName, channelId, text, type, timestamp, isRead, messageType, imageUrl, stickerId, stickerPackageId)
+                VALUES (@archiveId, @userId, @userName, @channelId, @text, @type, @timestamp, @isRead, @messageType, @imageUrl, @stickerId, @stickerPackageId)`);
+    }
+
+    // ลบข้อความออกจาก Messages table
+    await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .input('channelId', sql.NVarChar, channelId)
+      .query(`DELETE FROM Messages WHERE userId = @userId AND channelId = @channelId`);
+
+    res.json({
+      success: true,
+      message: 'Conversation archived successfully',
+      archiveId: archiveId
+    });
+  } catch (error) {
+    console.error('Archive conversation error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get Archived Conversations
+app.get('/api/conversations/archived', async (req, res) => {
+  const { userId, agentId } = req.query;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({
+      success: false,
+      message: 'userId or agentId is required'
+    });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    let ownerIdToUse = userId;
+
+    // ถ้าเป็น agent ให้ใช้ ownerId = '1767638029604'
+    if (agentId) {
+      ownerIdToUse = '1767638029604';
+      console.log('📦 [Get Archived] Agent detected, using hardcoded ownerId:', ownerIdToUse);
+    }
+
+    console.log('📦 [Get Archived] Final ownerId:', ownerIdToUse);
+
+    const result = await pool.request()
+      .input('ownerId', sql.NVarChar, ownerIdToUse)
+      .query(`SELECT id, conversationKey, userId, userName, channelId, channelName, messageCount, note, archivedAt
+              FROM ArchivedConversations
+              WHERE ownerId = @ownerId
+              ORDER BY archivedAt DESC`);
+
+    res.json({
+      success: true,
+      archivedConversations: result.recordset
+    });
+  } catch (error) {
+    console.error('Get archived conversations error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get Archived Messages
+app.get('/api/conversations/archived/:archiveId/messages', async (req, res) => {
+  const { archiveId } = req.params;
+  const { userId, agentId } = req.query;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({
+      success: false,
+      message: 'userId or agentId is required'
+    });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // ใช้ hardcoded ownerId สำหรับ agent
+    let ownerIdToUse = userId;
+    if (agentId) {
+      ownerIdToUse = '1767638029604';
+      console.log('📨 [Get Messages] Agent detected, using hardcoded ownerId:', ownerIdToUse);
+    }
+
+    console.log('📨 [Get Messages] archiveId:', archiveId);
+    console.log('📨 [Get Messages] ownerIdToUse:', ownerIdToUse);
+
+    // ดึงข้อมูล archive
+    const archiveResult = await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .input('ownerId', sql.NVarChar, ownerIdToUse)
+      .query(`SELECT * FROM ArchivedConversations WHERE id = @archiveId AND ownerId = @ownerId`);
+
+    console.log('📨 [Get Messages] Archive found:', archiveResult.recordset.length > 0);
+
+    if (archiveResult.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Archive not found'
+      });
+    }
+
+    const archive = archiveResult.recordset[0];
+
+    // ดึงข้อความจาก ArchivedMessages
+    const messagesResult = await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .query(`SELECT * FROM ArchivedMessages WHERE archiveId = @archiveId ORDER BY timestamp ASC`);
+
+    console.log('📨 [Get Messages] Messages count:', messagesResult.recordset.length);
+
+    res.json({
+      success: true,
+      archive: archive,
+      messages: messagesResult.recordset
+    });
+  } catch (error) {
+    console.error('Get archived messages error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Restore Conversation
+app.post('/api/conversations/restore/:archiveId', async (req, res) => {
+  const { archiveId } = req.params;
+  const { userId, agentId } = req.body;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({
+      success: false,
+      message: 'userId or agentId is required'
+    });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // ใช้ hardcoded ownerId สำหรับ agent
+    let ownerIdToUse = userId;
+    if (agentId) {
+      ownerIdToUse = '1767638029604';
+      console.log('↩️ [Restore] Agent detected, using hardcoded ownerId:', ownerIdToUse);
+    }
+
+    // ดึงข้อมูล archive
+    const archiveResult = await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .input('ownerId', sql.NVarChar, ownerIdToUse)
+      .query(`SELECT * FROM ArchivedConversations WHERE id = @archiveId AND ownerId = @ownerId`);
+
+    console.log('↩️ [Restore] Archive found:', archiveResult.recordset.length > 0);
+
+    if (archiveResult.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Archive not found'
+      });
+    }
+
+    // ดึงข้อความที่เก็บไว้
+    const messagesResult = await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .query(`SELECT * FROM ArchivedMessages WHERE archiveId = @archiveId`);
+
+    // ดึงข้อมูล channel name
+    const archive = archiveResult.recordset[0];
+
+    // กู้คืนข้อความกลับไปที่ Messages table
+    for (const msg of messagesResult.recordset) {
+      // สร้าง unique id สำหรับข้อความ
+      const messageId = `${msg.userId}_${msg.timestamp}`;
+
+      await pool.request()
+        .input('id', sql.NVarChar, messageId)
+        .input('userId', sql.NVarChar, msg.userId)
+        .input('userName', sql.NVarChar, msg.userName)
+        .input('channelId', sql.NVarChar, msg.channelId)
+        .input('channelName', sql.NVarChar, archive.channelName)
+        .input('text', sql.NVarChar, msg.text)
+        .input('type', sql.NVarChar, msg.type)
+        .input('timestamp', sql.BigInt, msg.timestamp)
+        .input('isRead', sql.Bit, msg.isRead)
+        .input('messageType', sql.NVarChar, msg.messageType)
+        .input('imageUrl', sql.NVarChar, msg.imageUrl)
+        .input('stickerId', sql.NVarChar, msg.stickerId)
+        .input('stickerPackageId', sql.NVarChar, msg.stickerPackageId)
+        .query(`INSERT INTO Messages (id, userId, userName, channelId, channelName, text, type, timestamp, isRead, messageType, imageUrl, stickerId, stickerPackageId)
+                VALUES (@id, @userId, @userName, @channelId, @channelName, @text, @type, @timestamp, @isRead, @messageType, @imageUrl, @stickerId, @stickerPackageId)`);
+    }
+
+    // ลบข้อความที่เก็บไว้
+    await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .query(`DELETE FROM ArchivedMessages WHERE archiveId = @archiveId`);
+
+    // ลบข้อมูล archive
+    await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .query(`DELETE FROM ArchivedConversations WHERE id = @archiveId`);
+
+    res.json({
+      success: true,
+      message: 'Conversation restored successfully'
+    });
+  } catch (error) {
+    console.error('Restore conversation error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Delete Archived Conversation
+app.delete('/api/conversations/archived/:archiveId', async (req, res) => {
+  const { archiveId } = req.params;
+  const { userId, agentId } = req.query;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({
+      success: false,
+      message: 'userId or agentId is required'
+    });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // ใช้ hardcoded ownerId สำหรับ agent
+    let ownerIdToUse = userId;
+    if (agentId) {
+      ownerIdToUse = '1767638029604';
+      console.log('🗑️ [Delete] Agent detected, using hardcoded ownerId:', ownerIdToUse);
+    }
+
+    // ตรวจสอบว่า archive นี้เป็นของ user นี้
+    const archiveCheck = await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .input('ownerId', sql.NVarChar, ownerIdToUse)
+      .query(`SELECT id FROM ArchivedConversations WHERE id = @archiveId AND ownerId = @ownerId`);
+
+    console.log('🗑️ [Delete] Archive found:', archiveCheck.recordset.length > 0);
+
+    if (archiveCheck.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Archive not found'
+      });
+    }
+
+    // ลบข้อความที่เก็บไว้
+    await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .query(`DELETE FROM ArchivedMessages WHERE archiveId = @archiveId`);
+
+    // ลบข้อมูล archive
+    await pool.request()
+      .input('archiveId', sql.Int, archiveId)
+      .query(`DELETE FROM ArchivedConversations WHERE id = @archiveId`);
+
+    res.json({
+      success: true,
+      message: 'Archive deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete archive error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // ===== Groups Management =====
 
 // Get Groups

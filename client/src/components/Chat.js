@@ -604,6 +604,61 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
       setShowMobileChat(false);
     };
 
+    // จบแชท (Archive Conversation)
+    const handleArchiveConversation = async (userId, channelId) => {
+      if (!userId || !channelId) {
+        return;
+      }
+
+      // ขอยืนยันจากผู้ใช้
+      const confirmMessage = 'ต้องการจบแชทนี้หรือไม่?\n\nแชทจะถูกย้ายไปที่หน้า "จบแชท" และจะถูกลบออกจากรายการแชท';
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        // ใช้ hardcoded ownerId สำหรับ agent
+        const currentUserId = currentUser.role === 'agent' ? '1767638029604' : currentUser.id;
+
+        console.log('📦 [Archive] userId:', userId);
+        console.log('📦 [Archive] channelId:', channelId);
+        console.log('📦 [Archive] currentUserId:', currentUserId);
+        console.log('📦 [Archive] currentUser.role:', currentUser.role);
+
+        const response = await fetch('http://localhost:5000/api/conversations/archive', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userId,
+            channelId: channelId,
+            currentUserId: currentUserId,
+            note: '' // สามารถเพิ่ม input สำหรับใส่โน้ตได้
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('✓ จบแชทเรียบร้อย!\n\nสามารถดูแชทที่จบแล้วได้ที่หน้า "จบแชท"');
+
+          // รีเฟรชข้อมูล
+          fetchMessages();
+
+          // ล้างการเลือก
+          setSelectedUser(null);
+          setSelectedChannel(null);
+          setShowMobileChat(false);
+        } else {
+          alert('จบแชทไม่สำเร็จ: ' + data.message);
+        }
+      } catch (error) {
+        console.error('Error archiving conversation:', error);
+        alert('เกิดข้อผิดพลาดในการจบแชท');
+      }
+    };
+
   return (
     <div className="chat-container">
       <div className={`chat-sidebar ${showMobileChat ? 'hidden' : ''}`}>
@@ -854,6 +909,13 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                   Channel: {filteredMessages[0]?.channelName}
                 </span>
               </div>
+              <button
+                className="btn-archive-chat"
+                onClick={() => handleArchiveConversation(selectedUser, selectedChannel)}
+                title="จบแชท"
+              >
+                📦 จบแชท
+              </button>
             </div>
 
             {/* License Warning Banner */}

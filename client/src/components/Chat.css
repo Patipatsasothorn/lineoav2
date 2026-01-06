@@ -254,6 +254,10 @@
   padding: 20px;
   border-bottom: 1px solid #e2e8f0;
   background: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .chat-header h3 {
@@ -266,6 +270,30 @@
 .channel-info {
   font-size: 13px;
   color: #718096;
+}
+
+.btn-archive-chat {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+}
+
+.btn-archive-chat:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(245, 158, 11, 0.4);
+}
+
+.btn-archive-chat:active {
+  transform: translateY(0);
 }
 
 /* License Warning Banner */
@@ -901,6 +929,7 @@
     display: flex;
     align-items: center;
     padding: 16px;
+    flex-wrap: wrap;
   }
 
   .chat-header h3 {
@@ -909,6 +938,11 @@
 
   .channel-info {
     font-size: 12px;
+  }
+
+  .btn-archive-chat {
+    padding: 8px 16px;
+    font-size: 13px;
   }
 
   /* License Warning Banner */

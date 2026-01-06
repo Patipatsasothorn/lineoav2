@@ -3,6 +3,7 @@ import './App.css';
 import Login from './components/Login';
 import Home from './components/Home';
 import Chat from './components/Chat';
+import ArchivedChats from './components/ArchivedChats';
 import UserManagement from './components/UserManagement';
 import LicenseManagement from './components/LicenseManagement';
 import UserSettings from './components/UserSettings';
@@ -28,7 +29,7 @@ function App() {
     // รองรับ hash navigation
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash && ['home', 'chat', 'chatbot', 'dashboard', 'team', 'users', 'licenses', 'settings'].includes(hash)) {
+      if (hash && ['home', 'chat', 'archived', 'chatbot', 'dashboard', 'team', 'users', 'licenses', 'settings'].includes(hash)) {
         setCurrentPage(hash);
       }
     };
@@ -98,6 +99,12 @@ function App() {
               onClick={() => { setCurrentPage('chat'); setIsMobileMenuOpen(false); }}
             >
               💬 แชท
+            </button>
+            <button
+              className={`nav-link ${currentPage === 'archived' ? 'active' : ''}`}
+              onClick={() => { setCurrentPage('archived'); setIsMobileMenuOpen(false); }}
+            >
+              📦 จบแชท
             </button>
             <button
               className={`nav-link ${currentPage === 'chatbot' ? 'active' : ''}`}
@@ -174,6 +181,13 @@ function App() {
             <span className="sidebar-text">แชท</span>
           </button>
           <button
+            className={`sidebar-link ${currentPage === 'archived' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('archived')}
+          >
+            <span className="sidebar-icon">📦</span>
+            <span className="sidebar-text">จบแชท</span>
+          </button>
+          <button
             className={`sidebar-link ${currentPage === 'chatbot' ? 'active' : ''}`}
             onClick={() => setCurrentPage('chatbot')}
           >
@@ -235,6 +249,7 @@ function App() {
       <main className="main-content">
         {currentPage === 'home' && <Home currentUser={currentUser} />}
         {currentPage === 'chat' && <Chat currentUser={currentUser} />}
+        {currentPage === 'archived' && <ArchivedChats currentUser={currentUser} />}
         {currentPage === 'chatbot' && <Chatbot currentUser={currentUser} />}
         {currentPage === 'dashboard' && <Dashboard currentUser={currentUser} />}
         {currentPage === 'team' && <AgentManagement currentUser={currentUser} />}
