@@ -236,7 +236,11 @@ function Chat({ currentUser }) {
       } else {
         // ตรวจสอบว่าเป็น error จาก license หรือไม่
         if (data.code === 'LICENSE_EXPIRED') {
-          alert('⚠️ License หมดอายุ\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ในหน้าตั้งค่า');
+          if (currentUser.role === 'agent') {
+            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
+          } else {
+            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า');
+          }
         } else {
           alert('ส่งข้อความไม่สำเร็จ: ' + data.message);
         }
@@ -305,7 +309,11 @@ function Chat({ currentUser }) {
 
       if (!data.success) {
         if (data.code === 'LICENSE_EXPIRED') {
-          alert('⚠️ License หมดอายุ\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ในหน้าตั้งค่า');
+          if (currentUser.role === 'agent') {
+            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
+          } else {
+            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า');
+          }
         } else {
           alert('ส่งสติกเกอร์ไม่สำเร็จ: ' + data.message);
         }
@@ -855,15 +863,21 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                   <div className="warning-icon">⚠️</div>
                   <div className="warning-text">
                     <strong>License หมดอายุ!</strong>
-                    <p>คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่</p>
+                    {currentUser.role === 'agent' ? (
+                      <p>คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่</p>
+                    ) : (
+                      <p>คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่</p>
+                    )}
                   </div>
                 </div>
-                <button 
-                  className="btn-goto-settings" aria-readonly
-                  onClick={() => window.location.hash = '#settings' }
-                >
-                  ไปหน้าตั้งค่า →
-                </button>
+                {currentUser.role !== 'agent' && (
+                  <button
+                    className="btn-goto-settings" aria-readonly
+                    onClick={() => window.location.hash = '#settings' }
+                  >
+                    ไปหน้าตั้งค่า →
+                  </button>
+                )}
               </div>
             )}
 
@@ -937,7 +951,9 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                 onChange={(e) => setMessageText(e.target.value)}
                 placeholder={
                   currentUser.role !== 'admin' && !licenseStatus?.isValid
-                    ? "License หมดอายุ - ไม่สามารถส่งข้อความได้"
+                    ? currentUser.role === 'agent'
+                      ? "License หมดอายุ - ติดต่อเจ้าของบัญชี"
+                      : "License หมดอายุ - ไม่สามารถส่งข้อความได้"
                     : "พิมพ์ข้อความ..."
                 }
                 disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}

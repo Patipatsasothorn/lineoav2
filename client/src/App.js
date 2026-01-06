@@ -9,7 +9,7 @@ import UserSettings from './components/UserSettings';
 import Chatbot from './components/Chatbot';
 import Dashboard from './components/Dashboard';
 import TeamManagement from './components/TeamManagement';
-
+import AgentManagement from './components/agent';
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState('home');
@@ -111,12 +111,14 @@ function App() {
             >
               📊 แดชบอร์ด
             </button>
-            <button
-              className={`nav-link ${currentPage === 'team' ? 'active' : ''}`}
-              onClick={() => { setCurrentPage('team'); setIsMobileMenuOpen(false); }}
-            >
-              👨‍💼 กำหนดลูกทีม
-            </button>
+            {currentUser?.role !== 'agent' && (
+              <button
+                className={`nav-link ${currentPage === 'team' ? 'active' : ''}`}
+                onClick={() => { setCurrentPage('team'); setIsMobileMenuOpen(false); }}
+              >
+                👨‍💼 กำหนดลูกทีม
+              </button>
+            )}
 
             {isAdmin && (
               <>
@@ -185,13 +187,15 @@ function App() {
             <span className="sidebar-icon">📊</span>
             <span className="sidebar-text">แดชบอร์ด</span>
           </button>
-          <button
-            className={`sidebar-link ${currentPage === 'team' ? 'active' : ''}`}
-            onClick={() => setCurrentPage('team')}
-          >
-            <span className="sidebar-icon">👨‍💼</span>
-            <span className="sidebar-text">กำหนดลูกทีม</span>
-          </button>
+          {currentUser?.role !== 'agent' && (
+            <button
+              className={`sidebar-link ${currentPage === 'team' ? 'active' : ''}`}
+              onClick={() => setCurrentPage('team')}
+            >
+              <span className="sidebar-icon">👨‍💼</span>
+              <span className="sidebar-text">กำหนดลูกทีม</span>
+            </button>
+          )}
 
           {isAdmin && (
             <>
@@ -233,7 +237,7 @@ function App() {
         {currentPage === 'chat' && <Chat currentUser={currentUser} />}
         {currentPage === 'chatbot' && <Chatbot currentUser={currentUser} />}
         {currentPage === 'dashboard' && <Dashboard currentUser={currentUser} />}
-        {currentPage === 'team' && <TeamManagement currentUser={currentUser} />}
+        {currentPage === 'team' && <AgentManagement currentUser={currentUser} />}
         {currentPage === 'users' && isAdmin && <UserManagement currentUser={currentUser} />}
         {currentPage === 'licenses' && isAdmin && <LicenseManagement currentUser={currentUser} />}
         {currentPage === 'settings' && <UserSettings currentUser={currentUser} onUserUpdate={setCurrentUser} />}
