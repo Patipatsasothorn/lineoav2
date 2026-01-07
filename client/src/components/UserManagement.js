@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import ConfirmDialog from './ConfirmDialog';
+import PromptDialog from './PromptDialog';
 import './UserManagement.css';
 
 function UserManagement({ currentUser }) {
@@ -7,6 +10,14 @@ function UserManagement({ currentUser }) {
   const [editingUser, setEditingUser] = useState(null);
   const [showAddLicense, setShowAddLicense] = useState(null);
   const [selectedLicense, setSelectedLicense] = useState('');
+
+  // Dialog states
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, data: null });
+  const [promptDialog, setPromptDialog] = useState({ isOpen: false, action: null, data: null });
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   useEffect(() => {
     fetchUsers();
@@ -39,11 +50,15 @@ function UserManagement({ currentUser }) {
     }
   };
 
-  const handleChangeRole = async (userId, newRole) => {
-    if (!window.confirm(`แน่ใจหรือไม่ที่จะเปลี่ยน role เป็น ${newRole}?`)) {
-      return;
-    }
+  const handleChangeRole = (userId, newRole) => {
+    setConfirmDialog({
+      isOpen: true,
+      action: 'changeRole',
+      data: { userId, newRole }
+    });
+  };
 
+  const confirmChangeRole = async (userId, newRole) => {
     try {
       const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/role`, {
         method: 'PUT',
@@ -56,25 +71,25 @@ function UserManagement({ currentUser }) {
 
       const data = await response.json();
       if (data.success) {
-        alert('✅ เปลี่ยน Role สำเร็จ');
+        toast.success('เปลี่ยน Role สำเร็จ');
         fetchUsers();
       } else {
-        alert('❌ ' + data.message);
+        toast.error(data.message);
       }
     } catch (error) {
-      alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+      toast.error('เกิดข้อผิดพลาด: ' + error.message);
     }
   };
 
-  const handleResetPassword = async (userId) => {
-    const newPassword = prompt('กรอกรหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร):');
-    if (!newPassword) return;
+  const handleResetPassword = (userId) => {
+    setPromptDialog({
+      isOpen: true,
+      action: 'resetPassword',
+      data: { userId }
+    });
+  };
 
-    if (newPassword.length < 6) {
-      alert('❌ รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
-      return;
-    }
-
+  const confirmResetPassword = async (userId, newPassword) => {
     try {
       const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/reset-password`, {
         method: 'PUT',
@@ -87,20 +102,24 @@ function UserManagement({ currentUser }) {
 
       const data = await response.json();
       if (data.success) {
-        alert('✅ รีเซ็ตรหัสผ่านสำเร็จ');
+        toast.success('รีเซ็ตรหัสผ่านสำเร็จ');
       } else {
-        alert('❌ ' + data.message);
+        toast.error(data.message);
       }
     } catch (error) {
-      alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+      toast.error('เกิดข้อผิดพลาด: ' + error.message);
     }
   };
 
-  const handleDeleteUser = async (userId, username) => {
-    if (!window.confirm(`แน่ใจหรือไม่ที่จะลบผู้ใช้ "${username}"?\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้`)) {
-      return;
-    }
+  const handleDeleteUser = (userId, username) => {
+    setConfirmDialog({
+      isOpen: true,
+      action: 'deleteUser',
+      data: { userId, username }
+    });
+  };
 
+  const confirmDeleteUser = async (userId) => {
     try {
       const response = await fetch(`http://localhost:5000/api/admin/users/${userId}?adminUserId=${currentUser.id}`, {
         method: 'DELETE'
@@ -108,19 +127,19 @@ function UserManagement({ currentUser }) {
 
       const data = await response.json();
       if (data.success) {
-        alert('✅ ลบผู้ใช้สำเร็จ');
+        toast.success('ลบผู้ใช้สำเร็จ');
         fetchUsers();
       } else {
-        alert('❌ ' + data.message);
+        toast.error(data.message);
       }
     } catch (error) {
-      alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+      toast.error('เกิดข้อผิดพลาด: ' + error.message);
     }
   };
 
   const handleAddLicense = async (userId) => {
     if (!selectedLicense) {
-      alert('❌ กรุณาเลือก License Key');
+      toast.error('กรุณาเลือก License Key');
       return;
     }
 
@@ -136,16 +155,16 @@ function UserManagement({ currentUser }) {
 
       const data = await response.json();
       if (data.success) {
-        alert('✅ เพิ่ม License สำเร็จ');
+        toast.success('เพิ่ม License สำเร็จ');
         setShowAddLicense(null);
         setSelectedLicense('');
         fetchUsers();
         fetchLicenses();
       } else {
-        alert('❌ ' + data.message);
+        toast.error('' + data.message);
       }
     } catch (error) {
-      alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+      toast.error('เกิดข้อผิดพลาด: ' + error.message);
     }
   };
 
@@ -173,6 +192,49 @@ function UserManagement({ currentUser }) {
 
   const getUnusedLicenses = () => {
     return licenses.filter(l => l.status === 'unused');
+  };
+
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentUsers = users.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(users.length / itemsPerPage);
+
+  const handleDialogConfirm = () => {
+    const { action, data } = confirmDialog;
+    if (action === 'changeRole') {
+      confirmChangeRole(data.userId, data.newRole);
+    } else if (action === 'deleteUser') {
+      confirmDeleteUser(data.userId);
+    }
+    setConfirmDialog({ isOpen: false, action: null, data: null });
+  };
+
+  const handlePromptConfirm = (value) => {
+    const { action, data } = promptDialog;
+    if (action === 'resetPassword') {
+      confirmResetPassword(data.userId, value);
+    }
+    setPromptDialog({ isOpen: false, action: null, data: null });
+  };
+
+  const getConfirmDialogProps = () => {
+    const { action, data } = confirmDialog;
+    if (action === 'changeRole') {
+      return {
+        title: 'ยืนยันการเปลี่ยน Role',
+        message: `แน่ใจหรือไม่ที่จะเปลี่ยน role เป็น ${data.newRole}?`,
+        type: 'question'
+      };
+    } else if (action === 'deleteUser') {
+      return {
+        title: 'ยืนยันการลบผู้ใช้',
+        message: `แน่ใจหรือไม่ที่จะลบผู้ใช้ "${data.username}"?\n\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้`,
+        type: 'danger',
+        confirmText: 'ลบผู้ใช้'
+      };
+    }
+    return {};
   };
 
   return (
@@ -216,7 +278,7 @@ function UserManagement({ currentUser }) {
                 </td>
               </tr>
             ) : (
-              users.map(user => (
+              currentUsers.map(user => (
                 <tr key={user.id}>
                   <td data-label="Username">
                     <strong>{user.username}</strong>
@@ -313,6 +375,102 @@ function UserManagement({ currentUser }) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {users.length > 0 && (
+        <div className="pagination-controls">
+          <div className="pagination-info">
+            แสดง {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, users.length)} จากทั้งหมด {users.length} รายการ
+          </div>
+
+          <div className="items-per-page">
+            <label>แสดงต่อหน้า:</label>
+            <select value={itemsPerPage} onChange={(e) => {
+              setItemsPerPage(Number(e.target.value));
+              setCurrentPage(1);
+            }}>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={500}>500</option>
+            </select>
+          </div>
+
+          <div className="pagination-buttons">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="pagination-btn"
+            >
+              ««
+            </button>
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="pagination-btn"
+            >
+              «
+            </button>
+
+            {[...Array(totalPages)].map((_, index) => {
+              const page = index + 1;
+              if (
+                page === 1 ||
+                page === totalPages ||
+                (page >= currentPage - 2 && page <= currentPage + 2)
+              ) {
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
+                  >
+                    {page}
+                  </button>
+                );
+              } else if (page === currentPage - 3 || page === currentPage + 3) {
+                return <span key={page} className="pagination-ellipsis">...</span>;
+              }
+              return null;
+            })}
+
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="pagination-btn"
+            >
+              »
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="pagination-btn"
+            >
+              »»
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, action: null, data: null })}
+        onConfirm={handleDialogConfirm}
+        {...getConfirmDialogProps()}
+      />
+
+      {/* Prompt Dialog */}
+      <PromptDialog
+        isOpen={promptDialog.isOpen}
+        onClose={() => setPromptDialog({ isOpen: false, action: null, data: null })}
+        onConfirm={handlePromptConfirm}
+        title="รีเซ็ตรหัสผ่าน"
+        message="กรอกรหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร):"
+        placeholder="รหัสผ่านใหม่..."
+        inputType="password"
+        minLength={6}
+      />
     </div>
   );
 }

@@ -50,6 +50,10 @@
   flex-direction: column;
   box-shadow: 4px 0 20px rgba(59, 130, 246, 0.1);
   z-index: 10;
+  margin: 12px 0 12px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  overflow: hidden;
 }
 
 .chat-sidebar h2 {
@@ -195,19 +199,16 @@
 
 /* Pin Button */
 .pin-button {
-  position: absolute;
-  right: 16px;
-  top: 16px;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(10px);
   border: none;
-  font-size: 20px;
+  font-size: 16px;
   cursor: pointer;
-  padding: 6px 10px;
+  padding: 4px 8px;
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 8px;
-  z-index: 10;
+  border-radius: 6px;
+  margin-left: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -539,11 +540,6 @@
   background: linear-gradient(135deg, rgba(247, 250, 252, 0.5) 0%, rgba(237, 242, 247, 0.5) 100%);
 }
 
-.message {
-  display: flex;
-  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -555,26 +551,20 @@
   }
 }
 
-.message.received {
-  justify-content: flex-start;
-}
-
-.message.sent {
-  justify-content: flex-end;
-}
-
 .message-content {
   max-width: 70%;
   display: flex;
   flex-direction: column;
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.message.received .message-content {
+.message-content.received {
   align-items: flex-start;
 }
 
-.message.sent .message-content {
+.message-content.sent {
   align-items: flex-end;
+  align-self: flex-end;
 }
 
 .message-text {
@@ -585,14 +575,14 @@
   font-size: 15px;
 }
 
-.message.received .message-text {
+.message-content.received .message-text {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   color: #2d3748;
   border-bottom-left-radius: 4px;
 }
 
-.message.sent .message-text {
+.message-content.sent .message-text {
   background: linear-gradient(135deg, #06C755 0%, #05B04A 100%);
   color: white;
   border-bottom-right-radius: 4px;
@@ -628,7 +618,7 @@
   font-style: italic;
 }
 
-.message .message-time {
+.message-content .message-time {
   font-size: 11px;
   color: #a0aec0;
   margin-top: 6px;
@@ -1316,6 +1306,8 @@
     height: 100%;
     z-index: 10;
     transition: transform 0.3s ease;
+    margin: 0;
+    border-radius: 0;
   }
 
   .chat-sidebar.hidden {
@@ -1389,6 +1381,14 @@
 
   .message-content {
     max-width: 85%;
+  }
+
+  .message-content.sent {
+    align-self: flex-end;
+  }
+
+  .message-content.received {
+    align-self: flex-start;
   }
 
   .messages-container {
@@ -1497,6 +1497,14 @@
 
   .message-content {
     max-width: 90%;
+  }
+
+  .message-content.sent {
+    align-self: flex-end;
+  }
+
+  .message-content.received {
+    align-self: flex-start;
   }
 
   .message-text {

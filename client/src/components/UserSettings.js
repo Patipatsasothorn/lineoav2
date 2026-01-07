@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import PromptDialog from './PromptDialog';
 import './UserSettings.css';
 import { config } from '../config';
 
@@ -9,9 +11,27 @@ function UserSettings({ currentUser, onUserUpdate }) {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [timeRemaining, setTimeRemaining] = useState(null);
 
+  // Settings state
+  const [notificationVolume, setNotificationVolume] = useState(50);
+  const [notificationEnabled, setNotificationEnabled] = useState(true);
+  const [promptDialog, setPromptDialog] = useState({ isOpen: false, action: null });
+
   useEffect(() => {
     fetchLicenseStatus();
+    loadSettings();
   }, [currentUser]);
+
+  const loadSettings = () => {
+    const savedVolume = localStorage.getItem('notificationVolume');
+    const savedEnabled = localStorage.getItem('notificationEnabled');
+
+    if (savedVolume !== null) {
+      setNotificationVolume(parseInt(savedVolume));
+    }
+    if (savedEnabled !== null) {
+      setNotificationEnabled(savedEnabled === 'true');
+    }
+  };
 
   useEffect(() => {
     // Update countdown every second
@@ -148,6 +168,102 @@ const handleActivateLicense = async (e) => {
     }
   };
 
+  const handleChangeUsername = (newUsername) => {
+    if (!newUsername || newUsername.trim().length < 3) {
+      toast.error('ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร');
+      return;
+    }
+
+    fetch('http://localhost:5000/api/users/update-username', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        newUsername: newUsername.trim()
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const updatedUser = { ...currentUser, username: newUsername.trim() };
+          localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+          if (onUserUpdate) onUserUpdate(updatedUser);
+          toast.success('เปลี่ยนชื่อผู้ใช้สำเร็จ');
+        } else {
+          toast.error('เปลี่ยนชื่อผู้ใช้ไม่สำเร็จ: ' + data.message);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        toast.error('เกิดข้อผิดพลาด');
+      });
+  };
+
+  const handleChangePassword = (newPassword) => {
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+      return;
+    }
+
+    fetch('http://localhost:5000/api/users/update-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        newPassword: newPassword
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          toast.success('เปลี่ยนรหัสผ่านสำเร็จ');
+        } else {
+          toast.error('เปลี่ยนรหัสผ่านไม่สำเร็จ: ' + data.message);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        toast.error('เกิดข้อผิดพลาด');
+      });
+  };
+
+  const handleVolumeChange = (e) => {
+    const newVolume = parseInt(e.target.value);
+    setNotificationVolume(newVolume);
+    localStorage.setItem('notificationVolume', newVolume);
+    window.dispatchEvent(new CustomEvent('notificationVolumeChange', { detail: newVolume }));
+  };
+
+  const handleVolumeChangeEnd = () => {
+    // เล่นเสียงทดสอบเมื่อปล่อยเมาส์
+    const audio = new Audio('/sound/notification.mp3');
+    audio.volume = notificationVolume / 100;
+    audio.play().catch(() => {
+      // ถ้าไม่มีไฟล์ ใช้เสียง base64 สำรอง
+      const fallbackAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGe87OWYSgwNUKzn77FdGAU7k9nxxnMoCSpzy/DajTwJE2Cx6uajUxELTKXh7rRfGgY+kdTvxHUpBylvyO7ZjTwJElyx6+mjUxELTKTh7bRfGgU9kdTvxHQoBylvyO7YjTsJEltw6+mjUxAKTKTh7bRfGgU9kdTuxHQoByhwyO3YjTwJEltw6+mjUhAKTKTh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvw=');
+      fallbackAudio.volume = notificationVolume / 100;
+      fallbackAudio.play().catch(() => {});
+    });
+  };
+
+  const handleToggleNotification = () => {
+    const newEnabled = !notificationEnabled;
+    setNotificationEnabled(newEnabled);
+    localStorage.setItem('notificationEnabled', newEnabled);
+    window.dispatchEvent(new CustomEvent('notificationEnabledChange', { detail: newEnabled }));
+    toast.success(newEnabled ? 'เปิดเสียงแจ้งเตือนแล้ว' : 'ปิดเสียงแจ้งเตือนแล้ว');
+  };
+
+  const handlePromptConfirm = (value) => {
+    const { action } = promptDialog;
+    if (action === 'changeUsername') {
+      handleChangeUsername(value);
+    } else if (action === 'changePassword') {
+      handleChangePassword(value);
+    }
+    setPromptDialog({ isOpen: false, action: null });
+  };
+
   return (
     <div className="settings-container">
       <div className="settings-content">
@@ -159,7 +275,27 @@ const handleActivateLicense = async (e) => {
           <div className="info-grid">
             <div className="info-item">
               <label>ชื่อผู้ใช้:</label>
-              <span>{currentUser.username}</span>
+              <div className="info-value-with-action">
+                <span>{currentUser.username}</span>
+                <button
+                  className="btn-edit"
+                  onClick={() => setPromptDialog({ isOpen: true, action: 'changeUsername' })}
+                >
+                  แก้ไข
+                </button>
+              </div>
+            </div>
+            <div className="info-item">
+              <label>รหัสผ่าน:</label>
+              <div className="info-value-with-action">
+                <span>••••••••</span>
+                <button
+                  className="btn-edit"
+                  onClick={() => setPromptDialog({ isOpen: true, action: 'changePassword' })}
+                >
+                  เปลี่ยน
+                </button>
+              </div>
             </div>
             <div className="info-item">
               <label>บทบาท:</label>
@@ -171,6 +307,52 @@ const handleActivateLicense = async (e) => {
               <label>วันที่สร้างบัญชี:</label>
               <span>{new Date(currentUser.createdAt).toLocaleDateString('th-TH')}</span>
             </div>
+          </div>
+        </div>
+
+        {/* การตั้งค่าการแจ้งเตือน */}
+        <div className="settings-section">
+          <h3>การแจ้งเตือน</h3>
+          <div className="notification-settings">
+            <div className="setting-item">
+              <div className="setting-header">
+                <label>เสียงแจ้งเตือน</label>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={notificationEnabled}
+                    onChange={handleToggleNotification}
+                  />
+                  <span className="slider"></span>
+                </label>
+              </div>
+              <p className="setting-description">
+                {notificationEnabled ? 'เปิดเสียงแจ้งเตือนเมื่อมีข้อความเข้า' : 'ปิดเสียงแจ้งเตือน'}
+              </p>
+            </div>
+
+            {notificationEnabled && (
+              <div className="setting-item">
+                <div className="setting-header">
+                  <label>ระดับเสียง ({notificationVolume}%)</label>
+                  <span className="volume-icon">{notificationVolume === 0 ? '🔇' : notificationVolume < 50 ? '🔉' : '🔊'}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={notificationVolume}
+                  onChange={handleVolumeChange}
+                  onMouseUp={handleVolumeChangeEnd}
+                  onTouchEnd={handleVolumeChangeEnd}
+                  className="volume-slider"
+                />
+                <div className="volume-labels">
+                  <span>🔇 0%</span>
+                  <span>🔊 100%</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -259,6 +441,19 @@ const handleActivateLicense = async (e) => {
           </div>
         )}
       </div>
+
+      {/* Prompt Dialog */}
+      <PromptDialog
+        isOpen={promptDialog.isOpen}
+        onClose={() => setPromptDialog({ isOpen: false, action: null })}
+        onConfirm={handlePromptConfirm}
+        title={promptDialog.action === 'changeUsername' ? 'เปลี่ยนชื่อผู้ใช้' : 'เปลี่ยนรหัสผ่าน'}
+        message={promptDialog.action === 'changeUsername' ? 'กรุณากรอกชื่อผู้ใช้ใหม่' : 'กรุณากรอกรหัสผ่านใหม่'}
+        placeholder={promptDialog.action === 'changeUsername' ? 'ชื่อผู้ใช้ใหม่' : 'รหัสผ่านใหม่'}
+        defaultValue={promptDialog.action === 'changeUsername' ? currentUser.username : ''}
+        inputType={promptDialog.action === 'changePassword' ? 'password' : 'text'}
+        minLength={promptDialog.action === 'changeUsername' ? 3 : 6}
+      />
     </div>
   );
 }

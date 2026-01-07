@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import { Toaster, toast } from 'sonner';
 import Login from './components/Login';
 import Home from './components/Home';
 import Chat from './components/Chat';
@@ -11,6 +12,7 @@ import Chatbot from './components/Chatbot';
 import Dashboard from './components/Dashboard';
 import TeamManagement from './components/TeamManagement';
 import AgentManagement from './components/agent';
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState('home');
@@ -39,6 +41,59 @@ function App() {
 
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  // SSE Listener for new messages (Global Notification)
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser) return;
+
+    const eventSource = new EventSource('http://localhost:5000/api/messages/stream');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'new_message' && data.message.type === 'received') {
+          const msg = data.message;
+
+          // ตรวจสอบการตั้งค่าเสียงแจ้งเตือน
+          const notificationEnabled = localStorage.getItem('notificationEnabled');
+          const notificationVolume = localStorage.getItem('notificationVolume');
+
+          // เล่นเสียงแจ้งเตือนถ้าเปิดใช้งาน
+          if (notificationEnabled !== 'false') {
+            const audio = new Audio('/sound/notification.mp3');
+            audio.volume = notificationVolume ? parseInt(notificationVolume) / 100 : 0.5;
+            audio.play().catch(() => {});
+          }
+
+          // แสดง Toast Notification
+          toast.info(
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <strong>💬 ข้อความใหม่จาก {msg.channelName}</strong>
+              <span>ผู้ส่ง: {msg.userName}</span>
+              <span style={{ fontSize: '12px', color: '#666' }}>
+                ⏱️ ตอบภายใน 30 วิ จะไม่เสียโควต้า LINE
+              </span>
+            </div>,
+            {
+              duration: 6000,
+              position: 'top-right',
+            }
+          );
+        }
+      } catch (error) {
+        console.error('Error parsing SSE message:', error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE Error:', error);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [isAuthenticated, currentUser]);
 
   const handleLogin = (token, user) => {
     localStorage.setItem('authToken', token);
@@ -71,6 +126,7 @@ function App() {
 
   return (
     <div className="app">
+      <Toaster richColors position="top-right" expand={true} />
       {/* Mobile Header */}
       <div className="mobile-header">
         <div className="nav-brand">

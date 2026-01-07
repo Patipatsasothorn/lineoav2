@@ -216,6 +216,72 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Register
+// Update username
+app.post('/api/users/update-username', async (req, res) => {
+  const { userId, newUsername } = req.body;
+
+  if (!userId || !newUsername) {
+    return res.status(400).json({ success: false, message: 'User ID and new username are required' });
+  }
+
+  if (newUsername.length < 3) {
+    return res.status(400).json({ success: false, message: 'Username must be at least 3 characters' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Check if username already exists
+    const checkResult = await pool.request()
+      .input('username', sql.NVarChar, newUsername)
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT id FROM Users WHERE username = @username AND id != @userId');
+
+    if (checkResult.recordset.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username already exists' });
+    }
+
+    // Update username
+    await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .input('newUsername', sql.NVarChar, newUsername)
+      .query('UPDATE Users SET username = @newUsername WHERE id = @userId');
+
+    res.json({ success: true, message: 'Username updated successfully' });
+  } catch (error) {
+    console.error('Update username error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update password
+app.post('/api/users/update-password', async (req, res) => {
+  const { userId, newPassword } = req.body;
+
+  if (!userId || !newPassword) {
+    return res.status(400).json({ success: false, message: 'User ID and new password are required' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Update password
+    await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .input('newPassword', sql.NVarChar, newPassword)
+      .query('UPDATE Users SET password = @newPassword WHERE id = @userId');
+
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Update password error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
 
@@ -2374,6 +2440,108 @@ app.patch('/api/auto-replies/:id/toggle', async (req, res) => {
     res.json({ success: true, message: 'Auto reply status toggled', isActive: newStatus });
   } catch (error) {
     console.error('Toggle auto reply error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ===== Dashboard API =====
+
+// Get Dashboard Stats
+app.get('/api/dashboard/stats', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).json({ success: false, message: 'userId is required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Get user role
+    const userResult = await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .query('SELECT role FROM Users WHERE id = @userId');
+
+    if (userResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const userRole = userResult.recordset[0].role;
+
+    // Get channels based on role
+    let channelQuery;
+    if (userRole === 'admin') {
+      // Admin sees all channels they own
+      channelQuery = `
+        SELECT id, channelName, channelSecret, channelAccessToken
+        FROM Channels
+        WHERE userId = @userId
+      `;
+    } else if (userRole === 'agent') {
+      // Agent sees only assigned channels
+      channelQuery = `
+        SELECT c.id, c.channelName, c.channelSecret, c.channelAccessToken
+        FROM Channels c
+        INNER JOIN AgentChannels ac ON c.id = ac.channelId
+        WHERE ac.agentId = @userId
+      `;
+    } else {
+      return res.status(403).json({ success: false, message: 'Invalid user role' });
+    }
+
+    const channelsResult = await pool.request()
+      .input('userId', sql.NVarChar, userId)
+      .query(channelQuery);
+
+    const channels = channelsResult.recordset;
+
+    if (channels.length === 0) {
+      return res.json({
+        success: true,
+        stats: {
+          totalMessages: 0,
+          channelStats: []
+        }
+      });
+    }
+
+    // Get message stats for each channel
+    const channelStats = [];
+    let totalMessages = 0;
+
+    for (const channel of channels) {
+      // Count sent messages (replies from our system)
+      const messageCountResult = await pool.request()
+        .input('channelId', sql.NVarChar, channel.id)
+        .query(`
+          SELECT COUNT(*) as count
+          FROM Messages
+          WHERE channelId = @channelId AND type = 'sent'
+        `);
+
+      const messageCount = messageCountResult.recordset[0].count;
+      totalMessages += messageCount;
+
+      channelStats.push({
+        channelId: channel.id,
+        channelName: channel.channelName,
+        messageCount: messageCount
+      });
+    }
+
+    // Sort by message count (highest first)
+    channelStats.sort((a, b) => b.messageCount - a.messageCount);
+
+    res.json({
+      success: true,
+      stats: {
+        totalMessages: totalMessages,
+        channelStats: channelStats
+      }
+    });
+
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

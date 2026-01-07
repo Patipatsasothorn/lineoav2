@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
+import ConfirmDialog from './ConfirmDialog';
 import './Chat.css';
 
 function Chat({ currentUser }) {
@@ -24,6 +26,7 @@ function Chat({ currentUser }) {
   const [showArchiveModal, setShowArchiveModal] = useState(false); // Modal สำหรับจบแชท
   const [archiveNote, setArchiveNote] = useState(''); // โน้ตสำหรับจบแชท
   const [archiveLoading, setArchiveLoading] = useState(false); // สถานะ loading ของการจบแชท
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, data: null }); // Dialog state
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -207,7 +210,7 @@ function Chat({ currentUser }) {
         const uploadData = await uploadResponse.json();
 
         if (!uploadData.success) {
-          alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadData.message);
+          toast.error('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadData.message);
           setLoading(false);
           return;
         }
@@ -240,17 +243,17 @@ function Chat({ currentUser }) {
         // ตรวจสอบว่าเป็น error จาก license หรือไม่
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
-            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่', { duration: 5000 });
           } else {
-            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า');
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า', { duration: 5000 });
           }
         } else {
-          alert('ส่งข้อความไม่สำเร็จ: ' + data.message);
+          toast.error('ส่งข้อความไม่สำเร็จ: ' + data.message);
         }
       }
     } catch (err) {
       console.error('Error sending message:', err);
-      alert('เกิดข้อผิดพลาดในการส่งข้อความ');
+      toast.error('เกิดข้อผิดพลาดในการส่งข้อความ');
     } finally {
       setLoading(false);
     }
@@ -260,7 +263,7 @@ function Chat({ currentUser }) {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        alert('ไฟล์รูปภาพต้องมีขนาดไม่เกิน 10MB');
+        toast.error('ไฟล์รูปภาพต้องมีขนาดไม่เกิน 10MB');
         return;
       }
 
@@ -313,17 +316,17 @@ function Chat({ currentUser }) {
       if (!data.success) {
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
-            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่', { duration: 5000 });
           } else {
-            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า');
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า', { duration: 5000 });
           }
         } else {
-          alert('ส่งสติกเกอร์ไม่สำเร็จ: ' + data.message);
+          toast.error('ส่งสติกเกอร์ไม่สำเร็จ: ' + data.message);
         }
       }
     } catch (err) {
       console.error('Error sending sticker:', err);
-      alert('เกิดข้อผิดพลาดในการส่งสติกเกอร์');
+      toast.error('เกิดข้อผิดพลาดในการส่งสติกเกอร์');
     } finally {
       setLoading(false);
     }
@@ -352,7 +355,7 @@ function Chat({ currentUser }) {
       setMessages(prevMessages =>
         prevMessages.map(msg =>
           msg.userId === userId && msg.channelId === channelId && msg.type === 'received'
-            ? { ...msg, read: true }
+            ? { ...msg, isRead: true }
             : msg
         )
       );
@@ -489,7 +492,7 @@ function Chat({ currentUser }) {
       msg.userId === userId &&
       msg.channelId === channelId &&
       msg.type === 'received' &&
-      !msg.read
+      !msg.isRead
     ).length;
   };
 
@@ -501,12 +504,12 @@ function Chat({ currentUser }) {
   // สร้างกลุ่มใหม่
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      alert('กรุณาใส่ชื่อกลุ่ม');
+      toast.warning('กรุณาใส่ชื่อกลุ่ม');
       return;
     }
 
     if (selectedConversations.length === 0) {
-      alert('กรุณาเลือกอย่างน้อย 1 conversation');
+      toast.warning('กรุณาเลือกอย่างน้อย 1 conversation');
       return;
     }
 
@@ -531,18 +534,24 @@ function Chat({ currentUser }) {
         setGroupName('');
         setSelectedConversations([]);
         setSelectionMode(false);
-        alert('สร้างกลุ่มสำเร็จ!');
+        toast.success('สร้างกลุ่มสำเร็จ!');
       }
     } catch (error) {
-      alert('เกิดข้อผิดพลาด');
+      toast.error('เกิดข้อผิดพลาด');
       console.error(error);
     }
   };
 
   // ลบกลุ่ม
-  const handleDeleteGroup = async (groupId) => {
-    if (!window.confirm('ต้องการลบกลุ่มนี้?')) return;
+  const handleDeleteGroup = (groupId) => {
+    setConfirmDialog({
+      isOpen: true,
+      action: 'deleteGroup',
+      data: { groupId }
+    });
+  };
 
+  const confirmDeleteGroup = async (groupId) => {
     try {
       const response = await fetch(`http://localhost:5000/api/groups/${groupId}?userId=${currentUser.id}`, {
         method: 'DELETE'
@@ -550,10 +559,10 @@ function Chat({ currentUser }) {
 
       if (response.ok) {
         setGroups(groups.filter(g => g.id !== groupId));
-        alert('ลบกลุ่มสำเร็จ');
+        toast.success('ลบกลุ่มสำเร็จ');
       }
     } catch (error) {
-      alert('เกิดข้อผิดพลาด');
+      toast.error('เกิดข้อผิดพลาด');
     }
   };
 
@@ -647,15 +656,24 @@ function Chat({ currentUser }) {
         setShowMobileChat(false);
         setShowArchiveModal(false);
         setArchiveNote('');
+        toast.success('จบแชทสำเร็จ');
       } else {
-        alert('จบแชทไม่สำเร็จ: ' + data.message);
+        toast.error('จบแชทไม่สำเร็จ: ' + data.message);
       }
     } catch (error) {
       console.error('Error archiving conversation:', error);
-      alert('เกิดข้อผิดพลาดในการจบแชท');
+      toast.error('เกิดข้อผิดพลาดในการจบแชท');
     } finally {
       setArchiveLoading(false);
     }
+  };
+
+  const handleDialogConfirm = () => {
+    const { action, data } = confirmDialog;
+    if (action === 'deleteGroup') {
+      confirmDeleteGroup(data.groupId);
+    }
+    setConfirmDialog({ isOpen: false, action: null, data: null });
   };
 
   return (
@@ -785,19 +803,19 @@ function Chat({ currentUser }) {
                                     onClick={(e) => e.stopPropagation()}
                                   />
                                 )}
-                                <button
-                                  className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    togglePinConversation(conversationKey);
-                                  }}
-                                >
-                                  📌
-                                </button>
                                 <div className="conversation-header">
                                   <span className="user-name">
                                     {displayName}
                                   </span>
+                                  <button
+                                    className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      togglePinConversation(conversationKey);
+                                    }}
+                                  >
+                                    📌
+                                  </button>
                                 </div>
                                 <div className="last-message">
                                   {lastMessage.text.substring(0, 30)}...
@@ -848,20 +866,20 @@ function Chat({ currentUser }) {
                             onClick={(e) => e.stopPropagation()}
                           />
                         )}
-                        <button
-                          className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            togglePinConversation(conversationKey);
-                          }}
-                          title={isPinned(conversationKey) ? 'ยกเลิกปักหมุด' : 'ปักหมุด'}
-                        >
-                          📌
-                        </button>
                         <div className="conversation-header">
                           <span className="user-name">
                             {displayName}
                           </span>
+                          <button
+                            className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePinConversation(conversationKey);
+                            }}
+                            title={isPinned(conversationKey) ? 'ยกเลิกปักหมุด' : 'ปักหมุด'}
+                          >
+                            📌
+                          </button>
                           {unreadCount > 0 && (
                             <span className="unread-badge">{unreadCount}</span>
                           )}
@@ -947,18 +965,16 @@ function Chat({ currentUser }) {
               {filteredMessages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`message ${msg.type === 'sent' ? 'sent' : 'received'}`}
+                  className={`message-content ${msg.type === 'sent' ? 'sent' : 'received'}`}
                 >
-                  <div className="message-content">
-                    <div className="message-text">
-                      {renderMessageContent(msg)}
-                    </div>
-                    <div className="message-time">
-                      {new Date(Number(msg.timestamp)).toLocaleString('th-TH', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
+                  <div className="message-text">
+                    {renderMessageContent(msg)}
+                  </div>
+                  <div className="message-time">
+                    {new Date(Number(msg.timestamp)).toLocaleString('th-TH', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </div>
                 </div>
               ))}
@@ -1147,6 +1163,17 @@ function Chat({ currentUser }) {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, action: null, data: null })}
+        onConfirm={handleDialogConfirm}
+        title="ยืนยันการลบกลุ่ม"
+        message="ต้องการลบกลุ่มนี้หรือไม่?"
+        type="warning"
+        confirmText="ลบกลุ่ม"
+      />
     </div>
   );
 }

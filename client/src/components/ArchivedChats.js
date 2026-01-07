@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import './ArchivedChats.css';
 
 function ArchivedChats({ currentUser }) {
@@ -71,11 +72,11 @@ function ArchivedChats({ currentUser }) {
         setSelectedArchive(data.archive);
         setMessages(data.messages);
       } else {
-        alert('ไม่พบแชทที่เก็บไว้: ' + data.message);
+        toast.error('ไม่พบแชทที่เก็บไว้: ' + data.message);
       }
     } catch (error) {
       console.error('Error fetching archived messages:', error);
-      alert('เกิดข้อผิดพลาดในการโหลดข้อความ');
+      toast.error('เกิดข้อผิดพลาดในการโหลดข้อความ');
     } finally {
       setLoading(false);
     }
@@ -106,16 +107,16 @@ function ArchivedChats({ currentUser }) {
       const data = await response.json();
 
       if (data.success) {
-        alert('✓ นำแชทกลับมาเรียบร้อย!');
+        toast.success('นำแชทกลับมาเรียบร้อย!');
         fetchArchivedConversations();
         setSelectedArchive(null);
         setMessages([]);
       } else {
-        alert('นำแชทกลับไม่สำเร็จ: ' + data.message);
+        toast.error('นำแชทกลับไม่สำเร็จ: ' + data.message);
       }
     } catch (error) {
       console.error('Error restoring conversation:', error);
-      alert('เกิดข้อผิดพลาดในการนำแชทกลับ');
+      toast.error('เกิดข้อผิดพลาดในการนำแชทกลับ');
     }
   };
 
@@ -139,16 +140,16 @@ function ArchivedChats({ currentUser }) {
       const data = await response.json();
 
       if (data.success) {
-        alert('✓ ลบแชทเรียบร้อย!');
+        toast.success('ลบแชทเรียบร้อย!');
         fetchArchivedConversations();
         setSelectedArchive(null);
         setMessages([]);
       } else {
-        alert('ลบแชทไม่สำเร็จ: ' + data.message);
+        toast.error('ลบแชทไม่สำเร็จ: ' + data.message);
       }
     } catch (error) {
       console.error('Error deleting conversation:', error);
-      alert('เกิดข้อผิดพลาดในการลบแชท');
+      toast.error('เกิดข้อผิดพลาดในการลบแชท');
     }
   };
 
