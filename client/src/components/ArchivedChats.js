@@ -126,6 +126,12 @@ function ArchivedChats({ currentUser }) {
 
     try {
       const isAgent = currentUser.role === 'agent';
+
+      if (isAgent) {
+        alert('คุณไม่มีสิทธิ์ในการลบแชทที่เก็บไว้');
+        return;
+      }
+
       const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
       const url = `http://localhost:5000/api/conversations/archived/${archiveId}?${param}`;
 
@@ -337,16 +343,18 @@ function ArchivedChats({ currentUser }) {
                   >
                     ↩️ นำกลับ
                   </button>
-                  <button
-                    className="btn-delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteConversation(archive.id);
-                    }}
-                    title="ลบถาวร"
-                  >
-                    🗑️ ลบ
-                  </button>
+                  {currentUser.role !== 'agent' && (
+                    <button
+                      className="btn-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteConversation(archive.id);
+                      }}
+                      title="ลบถาวร"
+                    >
+                      🗑️ ลบ
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -377,12 +385,14 @@ function ArchivedChats({ currentUser }) {
                 >
                   ↩️ นำกลับมาใช้งาน
                 </button>
-                <button
-                  className="btn-delete-large"
-                  onClick={() => handleDeleteConversation(selectedArchive.id)}
-                >
-                  🗑️ ลบถาวร
-                </button>
+                {currentUser.role !== 'agent' && (
+                  <button
+                    className="btn-delete-large"
+                    onClick={() => handleDeleteConversation(selectedArchive.id)}
+                  >
+                    🗑️ ลบถาวร
+                  </button>
+                )}
               </div>
             </div>
 

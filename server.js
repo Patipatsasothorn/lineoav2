@@ -1400,6 +1400,13 @@ app.delete('/api/conversations/archived/:archiveId', async (req, res) => {
     });
   }
 
+  if (agentId) {
+    return res.status(403).json({
+      success: false,
+      message: 'Agents do not have permission to delete archived conversations'
+    });
+  }
+
   try {
     const pool = await poolPromise;
 
