@@ -132,14 +132,17 @@ async function checkAutoReply(text, userId) {
     const pool = await poolPromise;
     const result = await pool.request()
       .input('userId', sql.NVarChar, userId)
-      .query('SELECT TOP 1 * FROM AutoReplies WHERE userId = @userId AND isActive = 1');
+      .query('SELECT * FROM AutoReplies WHERE userId = @userId AND isActive = 1 ORDER BY createdAt DESC');
 
-    if (result.recordset.length > 0) {
-      const rule = result.recordset[0];
+    // วนหาทุก rule ที่ตรงกับ keyword
+    for (const rule of result.recordset) {
       if (text.toLowerCase().includes(rule.keyword.toLowerCase())) {
+        console.log(`✓ Found matching keyword: "${rule.keyword}" in text: "${text}"`);
         return rule;
       }
     }
+
+    console.log(`✗ No matching keyword found in text: "${text}"`);
     return null;
   } catch (error) {
     console.error('Error checking auto reply:', error);
@@ -632,17 +635,27 @@ app.post('/webhook/:channelId', async (req, res) => {
 
           // Auto Reply
           if (messageType === 'text') {
+            console.log(`🔍 Checking auto reply for userId: ${channel.userId}, text: "${messageText}"`);
             const matchedRule = await checkAutoReply(messageText, channel.userId);
             if (matchedRule) {
-              console.log(`🤖 Auto reply triggered`);
-
-
+              console.log(`🤖 Auto reply triggered with keyword: "${matchedRule.keyword}" (type: ${matchedRule.messageType || 'text'})`);
               try {
-                await client.replyMessage(event.replyToken, {
-                  type: 'text',
-                  text: matchedRule.reply
-                });
+                // สร้างข้อความตามประเภท
+                let replyMessage;
+                if (matchedRule.messageType === 'image') {
+                  replyMessage = {
+                    type: 'image',
+                    originalContentUrl: matchedRule.reply,
+                    previewImageUrl: matchedRule.reply
+                  };
+                } else {
+                  replyMessage = {
+                    type: 'text',
+                    text: matchedRule.reply
+                  };
+                }
 
+                await client.replyMessage(event.replyToken, replyMessage);
 
                 // Save auto reply message
                 const autoReplyId = Date.now().toString() + Math.random();
@@ -653,13 +666,12 @@ app.post('/webhook/:channelId', async (req, res) => {
                   .input('userId', sql.NVarChar, event.source.userId)
                   .input('userName', sql.NVarChar, 'Auto Reply')
                   .input('text', sql.NVarChar, matchedRule.reply)
+                  .input('messageType', sql.NVarChar, matchedRule.messageType || 'text')
                   .input('timestamp', sql.BigInt, Date.now())
                   .input('type', sql.NVarChar, 'sent')
                   .input('isAutoReply', sql.Bit, 1)
                   .query(`INSERT INTO Messages (id, channelId, channelName, userId, userName, text, messageType, timestamp, type, isRead, isAutoReply)
-                          VALUES (@id, @channelId, @channelName, @userId, @userName, @text, 'text', @timestamp, @type, 1, @isAutoReply)`);
-
-
+                          VALUES (@id, @channelId, @channelName, @userId, @userName, @text, @messageType, @timestamp, @type, 1, @isAutoReply)`);
                 console.log('✓ Auto reply sent');
               } catch (error) {
                 console.error('Error sending auto reply:', error);
@@ -2211,7 +2223,7 @@ app.get('/api/auto-replies', async (req, res) => {
 
 // Create Auto Reply
 app.post('/api/auto-replies', async (req, res) => {
-  const { keyword, reply, userId, isActive } = req.body;
+  const { keyword, reply, messageType, userId, isActive } = req.body;
 
 
   if (!keyword || !reply || !userId) {
@@ -2228,13 +2240,14 @@ app.post('/api/auto-replies', async (req, res) => {
       .input('id', sql.NVarChar, newRuleId)
       .input('keyword', sql.NVarChar, keyword)
       .input('reply', sql.NVarChar, reply)
+      .input('messageType', sql.NVarChar, messageType || 'text')
       .input('userId', sql.NVarChar, userId)
       .input('isActive', sql.Bit, isActive !== false ? 1 : 0)
-      .query(`INSERT INTO AutoReplies (id, keyword, reply, userId, isActive, createdAt)
-              VALUES (@id, @keyword, @reply, @userId, @isActive, GETDATE())`);
+      .query(`INSERT INTO AutoReplies (id, keyword, reply, messageType, userId, isActive, createdAt)
+              VALUES (@id, @keyword, @reply, @messageType, @userId, @isActive, GETDATE())`);
 
 
-    console.log(`✓ Auto reply created: "${keyword}" -> "${reply}"`);
+    console.log(`✓ Auto reply created: "${keyword}" -> "${reply}" (type: ${messageType || 'text'})`);
 
 
     res.json({ success: true, message: 'Auto reply created successfully', autoReply: { id: newRuleId } });
@@ -2247,7 +2260,7 @@ app.post('/api/auto-replies', async (req, res) => {
 // Update Auto Reply
 app.put('/api/auto-replies/:id', async (req, res) => {
   const { id } = req.params;
-  const { keyword, reply, isActive, userId } = req.body;
+  const { keyword, reply, messageType, isActive, userId } = req.body;
 
 
   try {
@@ -2278,6 +2291,10 @@ app.put('/api/auto-replies/:id', async (req, res) => {
     if (reply !== undefined) {
       updateFields.push('reply = @reply');
       request.input('reply', sql.NVarChar, reply);
+    }
+    if (messageType !== undefined) {
+      updateFields.push('messageType = @messageType');
+      request.input('messageType', sql.NVarChar, messageType);
     }
     if (isActive !== undefined) {
       updateFields.push('isActive = @isActive');

@@ -92,6 +92,12 @@
   font-weight: 600;
   color: #2d3748;
   margin: 0;
+  flex: 1;
+}
+
+.reply-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .reply-info {
@@ -256,6 +262,45 @@
   transform: none;
 }
 
+.form-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.cancel-button {
+  padding: 12px;
+  background: #718096;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-button:hover {
+  background: #4a5568;
+  transform: translateY(-1px);
+}
+
+.edit-button {
+  padding: 6px 10px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-button:hover {
+  background: #5568d3;
+  transform: scale(1.05);
+}
+
 .delete-button {
   padding: 6px 10px;
   background: #fc8181;
@@ -269,6 +314,7 @@
 
 .delete-button:hover {
   background: #f56565;
+  transform: scale(1.05);
 }
 
 .info-item {
