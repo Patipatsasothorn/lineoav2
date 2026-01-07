@@ -32,11 +32,13 @@ function Login({ onLogin }) {
         body: JSON.stringify(formData),
       });
 
+      console.log('Login attempt for user:', formData.username);
       const data = await response.json();
 
       if (data.success) {
         onLogin(data.token, data.user);
       } else {
+        console.log('Login failed:', data.message);
         setError(data.message || 'เข้าสู่ระบบไม่สำเร็จ');
       }
     } catch (err) {
@@ -54,8 +56,8 @@ function Login({ onLogin }) {
     <div className="login-container">
       <div className="login-box">
         <h1 className="login-title">เข้าสู่ระบบ</h1>
-        <p className="login-subtitle">LineOA v2 - ระบบจัดการ LINE Official Account</p>
-        
+        <p className="login-subtitle">QO Chat - ระบบจัดการแชทบริการลูกค้า</p>
+
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
             <label htmlFor="username">ชื่อผู้ใช้</label>
@@ -85,8 +87,8 @@ function Login({ onLogin }) {
 
           {error && <div className="error-message">{error}</div>}
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="login-button"
             disabled={loading}
           >
@@ -95,7 +97,7 @@ function Login({ onLogin }) {
 
           <div className="register-link">
             <span>ยังไม่มีบัญชี? </span>
-            <button 
+            <button
               type="button"
               className="link-button"
               onClick={() => setShowRegister(true)}

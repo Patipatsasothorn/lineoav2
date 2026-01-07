@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
+import ConfirmDialog from './ConfirmDialog';
 import './Chat.css';
 
 function Chat({ currentUser }) {
@@ -20,38 +22,23 @@ function Chat({ currentUser }) {
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false); // สำหรับ mobile navigation
   const [licenseStatus, setLicenseStatus] = useState(null); // สถานะ license
+  const [pinnedConversations, setPinnedConversations] = useState([]); // การสนทนาที่ปักหมุด
+  const [showArchiveModal, setShowArchiveModal] = useState(false); // Modal สำหรับจบแชท
+  const [archiveNote, setArchiveNote] = useState(''); // โน้ตสำหรับจบแชท
+  const [archiveLoading, setArchiveLoading] = useState(false); // สถานะ loading ของการจบแชท
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, data: null }); // Dialog state
+  const [quickReplies, setQuickReplies] = useState([]); // ชุดคำตอบสำเร็จรูป
+  const [showQuickReplies, setShowQuickReplies] = useState(false); // แสดง/ซ่อน Quick Replies picker
+  const [quickReplySearch, setQuickReplySearch] = useState(''); // ค้นหาชุดคำตอบ
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // ฟังก์ชันสร้างสีจากชื่อ Line OA (ให้สีต่างกันแต่ละ Line OA)
-  const getColorForChannel = (channelName) => {
-    if (!channelName) return '#2d3748'; // สีเริ่มต้น
-
-    // สร้าง hash จากชื่อ
-    let hash = 0;
-    for (let i = 0; i < channelName.length; i++) {
-      hash = channelName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    // แปลง hash เป็นสี (เลือกสีที่สวยและอ่านง่าย)
-    const colors = [
-      '#e53e3e', // แดง
-      '#dd6b20', // ส้ม
-      '#d69e2e', // เหลือง-ทอง
-      '#38a169', // เขียว
-      '#319795', // เขียวน้ำเงิน
-      '#3182ce', // น้ำเงิน
-      '#5a67d8', // ม่วงน้ำเงิน
-      '#805ad5', // ม่วง
-      '#d53f8c', // ชมพู
-      '#c53030', // แดงเข้ม
-      '#2f855a', // เขียวเข้ม
-      '#2c5282', // น้ำเงินเข้ม
-    ];
-
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
+  // ฟังก์ชันดึงสีของ Channel จากฐานข้อมูล
+  const getChannelColor = (channelId) => {
+    if (!channelId) return '#667eea'; // สีเริ่มต้น
+    const channel = channels.find(c => c.id === channelId);
+    return channel?.color || '#667eea';
   };
 
   useEffect(() => {
@@ -60,28 +47,48 @@ function Chat({ currentUser }) {
       fetchMessages();
       fetchGroups();
       fetchLicenseStatus(); // ตรวจสอบสถานะ license
+      fetchPinnedConversations(); // ดึงการสนทนาที่ปักหมุด
+      fetchQuickReplies(); // ดึงชุดคำตอบสำเร็จรูป
     }
     // เชื่อมต่อ SSE สำหรับ real-time updates
     eventSourceRef.current = new EventSource('http://localhost:5000/api/messages/stream');
-    
+
     eventSourceRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'new_message') {
         // เพิ่มข้อความใหม่ท้าย array (เก่า -> ใหม่)
         setMessages(prevMessages => {
+          // ตรวจสอบว่ามีข้อความที่มี clientId เดียวกันอยู่แล้วหรือไม่ (จาก optimistic update)
+          if (data.message.clientId) {
+            const existingIndex = prevMessages.findIndex(msg => msg.clientId === data.message.clientId);
+            if (existingIndex !== -1) {
+              // แทนที่ optimistic message ด้วยข้อความจริงจาก server
+              const updatedMessages = [...prevMessages];
+              updatedMessages[existingIndex] = data.message;
+              return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+            }
+          }
+
+          // ตรวจสอบว่ามีข้อความที่มี id เดียวกันอยู่แล้วหรือไม่ (ป้องกันการแสดงซ้ำ)
+          const isDuplicate = prevMessages.some(msg => msg.id === data.message.id);
+          if (isDuplicate) {
+            return prevMessages;
+          }
+
+          // ถ้าไม่ซ้ำ ให้เพิ่มข้อความใหม่
           const newMessages = [...prevMessages, data.message];
           return newMessages.sort((a, b) => a.timestamp - b.timestamp);
         });
-        
+
         // เล่นเสียงแจ้งเตือน (optional)
         playNotificationSound();
       }
     };
-    
+
     eventSourceRef.current.onerror = (error) => {
       console.error('SSE Error:', error);
     };
-    
+
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -97,7 +104,7 @@ function Chat({ currentUser }) {
     // สร้างเสียงแจ้งเตือนง่ายๆ
     const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGe87OWYSgwNUKzn77FdGAU7k9nxxnMoCSpzy/DajTwJE2Cx6uajUxELTKXh7rRfGgY+kdTvxHUpBylvyO7ZjTwJElyx6+mjUxELTKTh7bRfGgU9kdTvxHQoBylvyO7YjTsJEltw6+mjUxAKTKTh7bRfGgU9kdTuxHQoByhwyO3YjTwJEltw6+mjUhAKTKTh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKTKPh7bRfGgU8kdPvxHUoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvxHQoByhvx+3YjTsJEltw6+mjUhAKS6Pg7bRfGgU8kdPvw=');
     audio.volume = 0.3;
-    audio.play().catch(() => {});
+    audio.play().catch(() => { });
   };
 
   const scrollToBottom = () => {
@@ -106,7 +113,9 @@ function Chat({ currentUser }) {
 
   const fetchChannels = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/channels?userId=${currentUser.id}`);
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const response = await fetch(`http://localhost:5000/api/channels?${param}`);
       const data = await response.json();
       if (data.success) {
         setChannels(data.channels);
@@ -118,7 +127,9 @@ function Chat({ currentUser }) {
 
   const fetchMessages = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/messages?userId=${currentUser.id}`);
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const response = await fetch(`http://localhost:5000/api/messages?${param}`);
       const data = await response.json();
       if (data.success) {
         setMessages(data.messages);
@@ -153,9 +164,152 @@ function Chat({ currentUser }) {
     }
   };
 
+  const fetchPinnedConversations = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/pinned-conversations?userId=${currentUser.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setPinnedConversations(data.pinnedConversations);
+      }
+    } catch (error) {
+      console.error('Error fetching pinned conversations:', error);
+    }
+  };
+
+  const togglePinConversation = async (conversationKey) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/pinned-conversations/toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          conversationKey: conversationKey
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchPinnedConversations(); // รีเฟรชรายการปักหมุด
+      }
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+    }
+  };
+
+  const isPinned = (conversationKey) => {
+    return pinnedConversations.some(pin => pin.conversationKey === conversationKey);
+  };
+
+  const fetchQuickReplies = async () => {
+    try {
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const response = await fetch(`http://localhost:5000/api/quick-replies?${param}`);
+      const data = await response.json();
+      if (data.success) {
+        setQuickReplies(data.quickReplies);
+      }
+    } catch (error) {
+      console.error('Error fetching quick replies:', error);
+    }
+  };
+
+  const handleSelectQuickReply = (quickReply) => {
+    if (quickReply.messageType === 'text') {
+      setMessageText(quickReply.message);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    } else if (quickReply.messageType === 'image') {
+      handleSendImageFromQuickReply(quickReply.imageUrl);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    } else if (quickReply.messageType === 'sticker') {
+      handleSendSticker(quickReply.stickerPackageId, quickReply.stickerId);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    }
+  };
+
+  const handleSendImageFromQuickReply = async (imageUrl) => {
+    if (!selectedUser || !selectedChannel) {
+      toast.error('กรุณาเลือกห้องแชทก่อน');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: '[รูปภาพ]',
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: 'image',
+        imageUrl: imageUrl,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
+      const response = await fetch('http://localhost:5000/api/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channelId: selectedChannel,
+          userId: selectedUser,
+          text: '[รูปภาพ]',
+          messageType: 'image',
+          imageUrl: imageUrl,
+          senderId: currentUser.id,
+          clientId: clientId
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
+        if (data.code === 'LICENSE_EXPIRED') {
+          if (currentUser.role === 'agent') {
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้');
+          } else {
+            toast.error('⚠️ License หมดอายุ! กรุณาเปิดใช้งาน License ใหม่');
+          }
+        } else {
+          toast.error('ส่งรูปภาพไม่สำเร็จ: ' + data.message);
+        }
+      }
+    } catch (err) {
+      console.error('Error sending image from quick reply:', err);
+      toast.error('เกิดข้อผิดพลาดในการส่งรูปภาพ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredQuickReplies = quickReplies.filter(qr =>
+    qr.title.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+    qr.message.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+    qr.category.toLowerCase().includes(quickReplySearch.toLowerCase())
+  );
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    
+
     if (!selectedUser || !selectedChannel) {
       return;
     }
@@ -168,28 +322,48 @@ function Chat({ currentUser }) {
     setLoading(true);
 
     try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
       let imageUrl = null;
-      
+
       // ถ้ามีรูปภาพ ให้ upload ก่อน
       if (selectedImage) {
         const formData = new FormData();
         formData.append('image', selectedImage);
-        
+
         const uploadResponse = await fetch('http://localhost:5000/api/upload/image', {
           method: 'POST',
           body: formData
         });
-        
+
         const uploadData = await uploadResponse.json();
-        
+
         if (!uploadData.success) {
-          alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadData.message);
+          toast.error('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadData.message);
           setLoading(false);
           return;
         }
-        
+
         imageUrl = uploadData.imageUrl;
       }
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: messageText || '[รูปภาพ]',
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: imageUrl ? 'image' : 'text',
+        imageUrl: imageUrl,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
 
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
@@ -202,7 +376,8 @@ function Chat({ currentUser }) {
           text: messageText || '[รูปภาพ]',
           messageType: imageUrl ? 'image' : 'text',
           imageUrl: imageUrl,
-          senderId: currentUser.id // ✨ เพิ่ม senderId
+          senderId: currentUser.id,
+          clientId: clientId
         }),
       });
 
@@ -213,16 +388,23 @@ function Chat({ currentUser }) {
         setSelectedImage(null);
         setImagePreview(null);
       } else {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         // ตรวจสอบว่าเป็น error จาก license หรือไม่
         if (data.code === 'LICENSE_EXPIRED') {
-          alert('⚠️ License หมดอายุ\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ในหน้าตั้งค่า');
+          if (currentUser.role === 'agent') {
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่', { duration: 5000 });
+          } else {
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า', { duration: 5000 });
+          }
         } else {
-          alert('ส่งข้อความไม่สำเร็จ: ' + data.message);
+          toast.error('ส่งข้อความไม่สำเร็จ: ' + data.message);
         }
       }
     } catch (err) {
       console.error('Error sending message:', err);
-      alert('เกิดข้อผิดพลาดในการส่งข้อความ');
+      toast.error('เกิดข้อผิดพลาดในการส่งข้อความ');
     } finally {
       setLoading(false);
     }
@@ -232,12 +414,12 @@ function Chat({ currentUser }) {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        alert('ไฟล์รูปภาพต้องมีขนาดไม่เกิน 10MB');
+        toast.error('ไฟล์รูปภาพต้องมีขนาดไม่เกิน 10MB');
         return;
       }
-      
+
       setSelectedImage(file);
-      
+
       // สร้าง preview
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -264,6 +446,27 @@ function Chat({ currentUser }) {
     setShowStickerPicker(false);
 
     try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: `[สติกเกอร์: ${packageId}/${stickerId}]`,
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: 'sticker',
+        stickerPackageId: packageId,
+        stickerId: stickerId,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
         headers: {
@@ -276,22 +479,31 @@ function Chat({ currentUser }) {
           messageType: 'sticker',
           stickerPackageId: packageId,
           stickerId: stickerId,
-          senderId: currentUser.id // ✨ เพิ่ม senderId
+          senderId: currentUser.id,
+          clientId: clientId
         }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         if (data.code === 'LICENSE_EXPIRED') {
-          alert('⚠️ License หมดอายุ\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ในหน้าตั้งค่า');
+          if (currentUser.role === 'agent') {
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่', { duration: 5000 });
+          } else {
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า', { duration: 5000 });
+          }
         } else {
-          alert('ส่งสติกเกอร์ไม่สำเร็จ: ' + data.message);
+          toast.error('ส่งสติกเกอร์ไม่สำเร็จ: ' + data.message);
         }
       }
     } catch (err) {
+      // ลบ optimistic message ถ้าเกิด error
       console.error('Error sending sticker:', err);
-      alert('เกิดข้อผิดพลาดในการส่งสติกเกอร์');
+      toast.error('เกิดข้อผิดพลาดในการส่งสติกเกอร์');
     } finally {
       setLoading(false);
     }
@@ -301,7 +513,7 @@ function Chat({ currentUser }) {
     setSelectedUser(userId);
     setSelectedChannel(channelId);
     setShowMobileChat(true); // แสดงหน้าแชทบนมือถือ
-    
+
     // ทำเครื่องหมายว่าอ่านแล้ว (เฉพาะ conversation นี้)
     try {
       // เรียก API เพื่อบันทึกลง Backend
@@ -310,17 +522,17 @@ function Chat({ currentUser }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          userId, 
-          channelId 
+        body: JSON.stringify({
+          userId,
+          channelId
         }),
       });
-      
+
       // อัปเดต state ใน Frontend
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.userId === userId && msg.channelId === channelId && msg.type === 'received' 
-            ? { ...msg, read: true } 
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg.userId === userId && msg.channelId === channelId && msg.type === 'received'
+            ? { ...msg, isRead: true }
             : msg
         )
       );
@@ -333,14 +545,14 @@ function Chat({ currentUser }) {
   const renderMessageContent = (msg) => {
     // ถ้าเป็นรูปภาพ
     if (msg.messageType === 'image' && msg.imageUrl) {
-      const fullImageUrl = msg.imageUrl.startsWith('http') 
-        ? msg.imageUrl 
+      const fullImageUrl = msg.imageUrl.startsWith('http')
+        ? msg.imageUrl
         : `http://localhost:5000${msg.imageUrl}`;
-      
+
       return (
         <div className="message-image">
-          <img 
-            src={fullImageUrl} 
+          <img
+            src={fullImageUrl}
             alt="Sent image"
             style={{ maxWidth: '300px', maxHeight: '300px', borderRadius: '8px' }}
             onError={(e) => {
@@ -348,19 +560,19 @@ function Chat({ currentUser }) {
               e.target.nextSibling.style.display = 'block';
             }}
           />
-          <span style={{display: 'none'}}>[รูปภาพ]</span>
+          <span style={{ display: 'none' }}>[รูปภาพ]</span>
         </div>
       );
     }
-    
+
     // ถ้าเป็นสติกเกอร์
     if (msg.messageType === 'sticker' && msg.stickerId) {
       const stickerUrl = `https://stickershop.line-scdn.net/stickershop/v1/sticker/${msg.stickerId}/android/sticker.png`;
-      
+
       return (
         <div className="message-sticker">
-          <img 
-            src={stickerUrl} 
+          <img
+            src={stickerUrl}
             alt="Sticker"
             style={{ width: '150px', height: '150px' }}
             onError={(e) => {
@@ -368,21 +580,21 @@ function Chat({ currentUser }) {
               e.target.nextSibling.style.display = 'block';
             }}
           />
-          <span style={{display: 'none'}}>{msg.text}</span>
+          <span style={{ display: 'none' }}>{msg.text}</span>
         </div>
       );
     }
-    
+
     // ตรวจสอบ text pattern สำหรับสติกเกอร์ (backward compatibility)
     const stickerMatch = msg.text.match(/\[สติกเกอร์: (\d+)\/(\d+)\]/);
     if (stickerMatch) {
       const stickerId = stickerMatch[2];
       const stickerUrl = `https://stickershop.line-scdn.net/stickershop/v1/sticker/${stickerId}/android/sticker.png`;
-      
+
       return (
         <div className="message-sticker">
-          <img 
-            src={stickerUrl} 
+          <img
+            src={stickerUrl}
             alt="Sticker"
             style={{ width: '150px', height: '150px' }}
             onError={(e) => {
@@ -390,11 +602,11 @@ function Chat({ currentUser }) {
               e.target.nextSibling.style.display = 'block';
             }}
           />
-          <span style={{display: 'none'}}>{msg.text}</span>
+          <span style={{ display: 'none' }}>{msg.text}</span>
         </div>
       );
     }
-    
+
     // ถ้าเป็นข้อความธรรมดา
     return msg.text;
   };
@@ -414,155 +626,232 @@ function Chat({ currentUser }) {
     groupedMessages[key].sort((a, b) => b.timestamp - a.timestamp);
   });
 
-  // เรียงรายการสนทนาตามข้อความล่าสุด (ใหม่ไปเก่า)
+  // เรียงรายการสนทนา: ปักหมุดก่อน แล้วเรียงตามข้อความล่าสุด
   const sortedConversations = Object.entries(groupedMessages).sort((a, b) => {
-    const lastMessageA = a[1][0];
-    const lastMessageB = b[1][0];
-    return lastMessageB.timestamp - lastMessageA.timestamp;
+    const keyA = a[0];
+    const keyB = b[0];
+    const isPinnedA = isPinned(keyA);
+    const isPinnedB = isPinned(keyB);
+
+    // ถ้าทั้งคู่ปักหมุด หรือไม่ปักหมุด ให้เรียงตามเวลา
+    if (isPinnedA === isPinnedB) {
+      const lastMessageA = a[1][0];
+      const lastMessageB = b[1][0];
+      return lastMessageB.timestamp - lastMessageA.timestamp;
+    }
+
+    // ถ้าปักหมุดแค่อันเดียว ให้อันที่ปักหมุดอยู่บนสุด
+    return isPinnedA ? -1 : 1;
   });
 
   // กรอง conversations ตาม searchQuery
-const filteredConversations = sortedConversations.filter(([conversationKey, userMessages]) => {
-  const lastMessage = userMessages[0];
-  const searchLower = searchQuery.toLowerCase();
-  
-  // ✅ เช็คว่าค่าต่างๆ ไม่เป็น undefined/null ก่อน toLowerCase()
-  const userName = (lastMessage.userName || '').toLowerCase();
-  const channelName = (lastMessage.channelName || '').toLowerCase();
-  const messageText = (lastMessage.text || '').toLowerCase();
-  
-  // ค้นหาจาก: ชื่อผู้ใช้, ชื่อ Channel, หรือข้อความล่าสุด
-  return (
-    userName.includes(searchLower) ||
-    channelName.includes(searchLower) ||
-    messageText.includes(searchLower)
-  );
-});
+  const filteredConversations = sortedConversations.filter(([conversationKey, userMessages]) => {
+    const lastMessage = userMessages[0];
+    const searchLower = searchQuery.toLowerCase();
+
+    // ✅ เช็คว่าค่าต่างๆ ไม่เป็น undefined/null ก่อน toLowerCase()
+    const userName = (lastMessage.userName || '').toLowerCase();
+    const channelName = (lastMessage.channelName || '').toLowerCase();
+    const messageText = (lastMessage.text || '').toLowerCase();
+
+    // ค้นหาจาก: ชื่อผู้ใช้, ชื่อ Channel, หรือข้อความล่าสุด
+    return (
+      userName.includes(searchLower) ||
+      channelName.includes(searchLower) ||
+      messageText.includes(searchLower)
+    );
+  });
 
   // นับจำนวนข้อความที่ยังไม่อ่าน (ตาม conversationKey)
   const getUnreadCount = (conversationKey) => {
     const [userId, channelId] = conversationKey.split('_');
-    return messages.filter(msg => 
-      msg.userId === userId && 
+    return messages.filter(msg =>
+      msg.userId === userId &&
       msg.channelId === channelId &&
-      msg.type === 'received' && 
-      !msg.read
+      msg.type === 'received' &&
+      !msg.isRead
     ).length;
   };
 
   // กรองข้อความตามที่เลือก และเรียงจากเก่าไปใหม่
   const filteredMessages = selectedUser && selectedChannel
     ? messages.filter(msg => msg.userId === selectedUser && msg.channelId === selectedChannel)
-        .sort((a, b) => a.timestamp - b.timestamp)
+      .sort((a, b) => a.timestamp - b.timestamp)
     : [];
-    // สร้างกลุ่มใหม่
-    const handleCreateGroup = async () => {
-      if (!groupName.trim()) {
-        alert('กรุณาใส่ชื่อกลุ่ม');
-        return;
-      }
-      
-      if (selectedConversations.length === 0) {
-        alert('กรุณาเลือกอย่างน้อย 1 conversation');
-        return;
-      }
-      
-      try {
-        const response = await fetch('http://localhost:5000/api/groups', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: groupName,
-            conversations: selectedConversations,
-            userId: currentUser.id
-          }),
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          setGroups([...groups, data.group]);
-          setShowGroupModal(false);
-          setGroupName('');
-          setSelectedConversations([]);
-          setSelectionMode(false);
-          alert('สร้างกลุ่มสำเร็จ!');
-        }
-      } catch (error) {
-        alert('เกิดข้อผิดพลาด');
-        console.error(error);
-      }
-    };
+  // สร้างกลุ่มใหม่
+  const handleCreateGroup = async () => {
+    if (!groupName.trim()) {
+      toast.warning('กรุณาใส่ชื่อกลุ่ม');
+      return;
+    }
 
-    // ลบกลุ่ม
-    const handleDeleteGroup = async (groupId) => {
-      if (!window.confirm('ต้องการลบกลุ่มนี้?')) return;
-      
-      try {
-        const response = await fetch(`http://localhost:5000/api/groups/${groupId}?userId=${currentUser.id}`, {
-          method: 'DELETE'
-        });
-        
-        if (response.ok) {
-          setGroups(groups.filter(g => g.id !== groupId));
-          alert('ลบกลุ่มสำเร็จ');
-        }
-      } catch (error) {
-        alert('เกิดข้อผิดพลาด');
-      }
-    };
+    if (selectedConversations.length === 0) {
+      toast.warning('กรุณาเลือกอย่างน้อย 1 conversation');
+      return;
+    }
 
-    // Toggle การเลือก conversation
-    const handleToggleConversation = (userId, channelId) => {
-      const conversationKey = { userId, channelId };
-      const exists = selectedConversations.some(
-        c => c.userId === userId && c.channelId === channelId
-      );
-      
-      if (exists) {
-        setSelectedConversations(selectedConversations.filter(
-          c => !(c.userId === userId && c.channelId === channelId)
-        ));
+    try {
+      const response = await fetch('http://localhost:5000/api/groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: groupName,
+          conversations: selectedConversations,
+          userId: currentUser.id
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setGroups([...groups, data.group]);
+        setShowGroupModal(false);
+        setGroupName('');
+        setSelectedConversations([]);
+        setSelectionMode(false);
+        toast.success('สร้างกลุ่มสำเร็จ!');
+      }
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาด');
+      console.error(error);
+    }
+  };
+
+  // ลบกลุ่ม
+  const handleDeleteGroup = (groupId) => {
+    setConfirmDialog({
+      isOpen: true,
+      action: 'deleteGroup',
+      data: { groupId }
+    });
+  };
+
+  const confirmDeleteGroup = async (groupId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/groups/${groupId}?userId=${currentUser.id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setGroups(groups.filter(g => g.id !== groupId));
+        toast.success('ลบกลุ่มสำเร็จ');
+      }
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาด');
+    }
+  };
+
+  // Toggle การเลือก conversation
+  const handleToggleConversation = (userId, channelId) => {
+    const conversationKey = { userId, channelId };
+    const exists = selectedConversations.some(
+      c => c.userId === userId && c.channelId === channelId
+    );
+
+    if (exists) {
+      setSelectedConversations(selectedConversations.filter(
+        c => !(c.userId === userId && c.channelId === channelId)
+      ));
+    } else {
+      setSelectedConversations([...selectedConversations, conversationKey]);
+    }
+  };
+
+  // Toggle Expand กลุ่ม
+  const handleToggleGroup = (groupId) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(groupId)) {
+      newExpanded.delete(groupId);
+    } else {
+      newExpanded.add(groupId);
+    }
+    setExpandedGroups(newExpanded);
+  };
+
+  // เช็คว่า conversation อยู่ในกลุ่มไหม
+  const isInGroup = (userId, channelId) => {
+    return groups.some(group =>
+      group.conversations.some(c =>
+        c.userId === userId && c.channelId === channelId
+      )
+    );
+  };
+
+  // หากลุ่มที่ conversation อยู่
+  const getGroupForConversation = (userId, channelId) => {
+    return groups.find(group =>
+      group.conversations.some(c =>
+        c.userId === userId && c.channelId === channelId
+      )
+    );
+  };
+
+  // ฟังก์ชันกลับไปรายการแชท (สำหรับมือถือ)
+  const handleBackToList = () => {
+    setShowMobileChat(false);
+  };
+
+  // จบแชท (Archive Conversation)
+  const handleArchiveConversation = async () => {
+    const userId = selectedUser;
+    const channelId = selectedChannel;
+
+    if (!userId || !channelId) {
+      return;
+    }
+
+    setArchiveLoading(true);
+
+    try {
+      // ใช้ hardcoded ownerId สำหรับ agent
+      const currentUserId = currentUser.role === 'agent' ? '1767638029604' : currentUser.id;
+
+      const response = await fetch('http://localhost:5000/api/conversations/archive', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: userId,
+          channelId: channelId,
+          currentUserId: currentUserId,
+          note: archiveNote
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // รีเฟรชข้อมูล
+        fetchMessages();
+
+        // ล้างการเลือก
+        setSelectedUser(null);
+        setSelectedChannel(null);
+        setShowMobileChat(false);
+        setShowArchiveModal(false);
+        setArchiveNote('');
+        toast.success('จบแชทสำเร็จ');
       } else {
-        setSelectedConversations([...selectedConversations, conversationKey]);
+        toast.error('จบแชทไม่สำเร็จ: ' + data.message);
       }
-    };
+    } catch (error) {
+      console.error('Error archiving conversation:', error);
+      toast.error('เกิดข้อผิดพลาดในการจบแชท');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
 
-    // Toggle Expand กลุ่ม
-    const handleToggleGroup = (groupId) => {
-      const newExpanded = new Set(expandedGroups);
-      if (newExpanded.has(groupId)) {
-        newExpanded.delete(groupId);
-      } else {
-        newExpanded.add(groupId);
-      }
-      setExpandedGroups(newExpanded);
-    };
-
-    // เช็คว่า conversation อยู่ในกลุ่มไหม
-    const isInGroup = (userId, channelId) => {
-      return groups.some(group => 
-        group.conversations.some(c => 
-          c.userId === userId && c.channelId === channelId
-        )
-      );
-    };
-
-    // หากลุ่มที่ conversation อยู่
-    const getGroupForConversation = (userId, channelId) => {
-      return groups.find(group =>
-        group.conversations.some(c =>
-          c.userId === userId && c.channelId === channelId
-        )
-      );
-    };
-
-    // ฟังก์ชันกลับไปรายการแชท (สำหรับมือถือ)
-    const handleBackToList = () => {
-      setShowMobileChat(false);
-    };
+  const handleDialogConfirm = () => {
+    const { action, data } = confirmDialog;
+    if (action === 'deleteGroup') {
+      confirmDeleteGroup(data.groupId);
+    }
+    setConfirmDialog({ isOpen: false, action: null, data: null });
+  };
 
   return (
     <div className="chat-container">
@@ -579,7 +868,7 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
             className="search-input"
           />
           {searchQuery && (
-            <button 
+            <button
               className="search-clear"
               onClick={() => setSearchQuery('')}
             >
@@ -587,9 +876,9 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
             </button>
           )}
         </div>
-                <div className="group-actions">
+        <div className="group-actions">
           {!selectionMode ? (
-            <button 
+            <button
               className="btn-selection-mode"
               onClick={() => setSelectionMode(true)}
             >
@@ -597,14 +886,14 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
             </button>
           ) : (
             <div className="selection-mode-buttons">
-              <button 
+              <button
                 className="btn-create-group"
                 onClick={() => setShowGroupModal(true)}
                 disabled={selectedConversations.length === 0}
               >
                 สร้างกลุ่ม ({selectedConversations.length})
               </button>
-              <button 
+              <button
                 className="btn-cancel"
                 onClick={() => {
                   setSelectionMode(false);
@@ -633,143 +922,163 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                 <p>ลองค้นหาด้วยคำอื่น</p>
               </div>
             ) : (
-          <div className="conversations-list">
-                      {/* แสดงกลุ่มก่อน */}
-  {groups.map(group => {
-    const isExpanded = expandedGroups.has(group.id);
-    
-    return (
-      <div key={`group-${group.id}`} className="conversation-group">
-        <div className="group-header" onClick={() => handleToggleGroup(group.id)}>
-          <span className="group-icon">{isExpanded ? '📂' : '📁'}</span>
-          <span className="group-name">{group.name}</span>
-          <span className="group-count">({group.conversations.length})</span>
-          <button 
-            className="btn-delete-group"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeleteGroup(group.id);
-            }}
-          >
-            ✕
-          </button>
-        </div>
-        
-        {isExpanded && (
-          <div className="group-conversations">
-            {group.conversations.map(({ userId, channelId }) => {
-              const messages = filteredConversations.find(
-                ([key]) => key === `${userId}_${channelId}`
-              );
-              if (!messages) return null;
-              
-              const [_, userMessages] = messages;
-              const lastMessage = userMessages[0];
-              const receivedMessage = userMessages.find(msg => msg.type === 'received');
-              const displayName = receivedMessage ? receivedMessage.userName : lastMessage.userName;
-              
-              return (
-                <div 
-                  key={`${userId}_${channelId}`}
-                  className={`conversation-item grouped ${selectedUser === userId && selectedChannel === channelId ? 'active' : ''}`}
-                  onClick={() => {
-                    if (!selectionMode) {
-                      handleSelectConversation(userId, channelId);
-                    }
-                  }}
-                >
-                  {selectionMode && (
-                    <input
-                      type="checkbox"
-                      className="conversation-checkbox"
-                      checked={selectedConversations.some(
-                        c => c.userId === userId && c.channelId === channelId
+              <div className="conversations-list">
+                {/* แสดงกลุ่มก่อน */}
+                {groups.map(group => {
+                  const isExpanded = expandedGroups.has(group.id);
+
+                  return (
+                    <div key={`group-${group.id}`} className="conversation-group">
+                      <div className="group-header" onClick={() => handleToggleGroup(group.id)}>
+                        <span className="group-icon">{isExpanded ? '📂' : '📁'}</span>
+                        <span className="group-name">{group.name}</span>
+                        <span className="group-count">({group.conversations.length})</span>
+                        <button
+                          className="btn-delete-group"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteGroup(group.id);
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="group-conversations">
+                          {group.conversations.map(({ userId, channelId }) => {
+                            const messages = filteredConversations.find(
+                              ([key]) => key === `${userId}_${channelId}`
+                            );
+                            if (!messages) return null;
+
+                            const [_, userMessages] = messages;
+                            const lastMessage = userMessages[0];
+                            const receivedMessage = userMessages.find(msg => msg.type === 'received');
+                            const displayName = receivedMessage ? receivedMessage.userName : lastMessage.userName;
+
+                            const conversationKey = `${userId}_${channelId}`;
+
+                            return (
+                              <div
+                                key={conversationKey}
+                                className={`conversation-item grouped ${selectedUser === userId && selectedChannel === channelId ? 'active' : ''} ${isPinned(conversationKey) ? 'pinned' : ''}`}
+                                onClick={() => {
+                                  if (!selectionMode) {
+                                    handleSelectConversation(userId, channelId);
+                                  }
+                                }}
+                              >
+                                {selectionMode && (
+                                  <input
+                                    type="checkbox"
+                                    className="conversation-checkbox"
+                                    checked={selectedConversations.some(
+                                      c => c.userId === userId && c.channelId === channelId
+                                    )}
+                                    onChange={() => handleToggleConversation(userId, channelId)}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                )}
+                                <div className="conversation-header">
+                                  <span className="user-name">
+                                    {displayName}
+                                  </span>
+                                  <button
+                                    className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      togglePinConversation(conversationKey);
+                                    }}
+                                  >
+                                    📌
+                                  </button>
+                                </div>
+                                <div className="last-message">
+                                  {lastMessage.text.substring(0, 30)}...
+                                </div>
+                                <span className="channel-badge" style={{ background: getChannelColor(lastMessage.channelId) }}>
+                                  {lastMessage.channelName}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
-                      onChange={() => handleToggleConversation(userId, channelId)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  )}
-                  <div className="conversation-header">
-                    <span className="user-name">
-                      {displayName}
-                    </span>
-                    <span className="channel-badge" style={{ background: getColorForChannel(lastMessage.channelName) }}>
-                      {lastMessage.channelName}
-                    </span>
-                  </div>
-                  <div className="last-message">
-                    {lastMessage.text.substring(0, 30)}...
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  })}
-  
-  {/* แสดง conversations ที่ไม่มีกลุ่ม */}
-    {filteredConversations
-      .filter(([conversationKey]) => {
-        const [userId, channelId] = conversationKey.split('_');
-        return !isInGroup(userId, channelId);
-      })
-      .map(([conversationKey, userMessages]) => {
-        const lastMessage = userMessages[0];
-        const unreadCount = getUnreadCount(conversationKey);
-        const receivedMessage = userMessages.find(msg => msg.type === 'received');
-        const displayName = receivedMessage ? receivedMessage.userName : lastMessage.userName;
-        const [userId, channelId] = conversationKey.split('_');
-        
-        return (
-          <div 
-            key={conversationKey}
-            className={`conversation-item ${selectedUser === lastMessage.userId && selectedChannel === lastMessage.channelId ? 'active' : ''}`}
-            onClick={() => {
-              if (!selectionMode) {
-                handleSelectConversation(lastMessage.userId, lastMessage.channelId);
-              }
-            }}
-          >
-            {selectionMode && (
-              <input
-                type="checkbox"
-                className="conversation-checkbox"
-                checked={selectedConversations.some(
-                  c => c.userId === userId && c.channelId === channelId
-                )}
-                onChange={() => handleToggleConversation(userId, channelId)}
-                onClick={(e) => e.stopPropagation()}
-              />
-            )}
-            <div className="conversation-header">
-              <span className="user-name">
-                {displayName}
-              </span>
-              <div className="conversation-meta">
-                <span className="channel-badge" style={{ background: getColorForChannel(lastMessage.channelName) }}>
-                  {lastMessage.channelName}
-                </span>
-                {unreadCount > 0 && (
-                  <span className="unread-badge">{unreadCount}</span>
-                )}
+                    </div>
+                  );
+                })}
+
+                {/* แสดง conversations ที่ไม่มีกลุ่ม */}
+                {filteredConversations
+                  .filter(([conversationKey]) => {
+                    const [userId, channelId] = conversationKey.split('_');
+                    return !isInGroup(userId, channelId);
+                  })
+                  .map(([conversationKey, userMessages]) => {
+                    const lastMessage = userMessages[0];
+                    const unreadCount = getUnreadCount(conversationKey);
+                    const receivedMessage = userMessages.find(msg => msg.type === 'received');
+                    const displayName = receivedMessage ? receivedMessage.userName : lastMessage.userName;
+                    const [userId, channelId] = conversationKey.split('_');
+
+                    return (
+                      <div
+                        key={conversationKey}
+                        className={`conversation-item ${isPinned(conversationKey) ? 'pinned' : ''} ${selectedUser === lastMessage.userId && selectedChannel === lastMessage.channelId ? 'active' : ''}`}
+                        onClick={() => {
+                          if (!selectionMode) {
+                            handleSelectConversation(lastMessage.userId, lastMessage.channelId);
+                          }
+                        }}
+                      >
+                        {selectionMode && (
+                          <input
+                            type="checkbox"
+                            className="conversation-checkbox"
+                            checked={selectedConversations.some(
+                              c => c.userId === userId && c.channelId === channelId
+                            )}
+                            onChange={() => handleToggleConversation(userId, channelId)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                        <div className="conversation-header">
+                          <span className="user-name">
+                            {displayName}
+                          </span>
+                          <button
+                            className={`pin-button ${isPinned(conversationKey) ? 'pinned' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePinConversation(conversationKey);
+                            }}
+                            title={isPinned(conversationKey) ? 'ยกเลิกปักหมุด' : 'ปักหมุด'}
+                          >
+                            📌
+                          </button>
+                          {unreadCount > 0 && (
+                            <span className="unread-badge">{unreadCount}</span>
+                          )}
+                        </div>
+                        <div className="last-message">
+                          {lastMessage.text.substring(0, 50)}
+                          {lastMessage.text.length > 50 ? '...' : ''}
+                        </div>
+                        <span className="channel-badge" style={{ background: getChannelColor(lastMessage.channelId) }}>
+                          {lastMessage.channelName}
+                        </span>
+                        <div className="message-time main-time">
+                          {new Date(Number(lastMessage.timestamp)).toLocaleString('th-TH', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                          {/* {lastMessage.timestamp} */}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
-            </div>
-            <div className="last-message">
-              {lastMessage.text.substring(0, 50)}
-              {lastMessage.text.length > 50 ? '...' : ''}
-            </div>
-            <div className="message-time">
-              {new Date(lastMessage.timestamp).toLocaleString('th-TH', {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </div>
-          </div>
-        );
-      })}
-  </div>
             )}
           </>
         )}
@@ -795,6 +1104,13 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                   Channel: {filteredMessages[0]?.channelName}
                 </span>
               </div>
+              <button
+                className="btn-archive-chat"
+                onClick={() => setShowArchiveModal(true)}
+                title="จบแชท"
+              >
+                📦 จบแชท
+              </button>
             </div>
 
             {/* License Warning Banner */}
@@ -804,34 +1120,38 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                   <div className="warning-icon">⚠️</div>
                   <div className="warning-text">
                     <strong>License หมดอายุ!</strong>
-                    <p>คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่</p>
+                    {currentUser.role === 'agent' ? (
+                      <p>คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่</p>
+                    ) : (
+                      <p>คุณไม่สามารถส่งข้อความได้ กรุณาเปิดใช้งาน License ใหม่</p>
+                    )}
                   </div>
                 </div>
-                <button 
-                  className="btn-goto-settings" aria-readonly
-                  onClick={() => window.location.hash = '#settings' }
-                >
-                  ไปหน้าตั้งค่า →
-                </button>
+                {currentUser.role !== 'agent' && (
+                  <button
+                    className="btn-goto-settings" aria-readonly
+                    onClick={() => window.location.hash = '#settings'}
+                  >
+                    ไปหน้าตั้งค่า →
+                  </button>
+                )}
               </div>
             )}
 
             <div className="messages-container">
               {filteredMessages.map((msg) => (
-                <div 
-                  key={msg.id} 
-                  className={`message ${msg.type === 'sent' ? 'sent' : 'received'}`}
+                <div
+                  key={msg.id}
+                  className={`message-content ${msg.type === 'sent' ? 'sent' : 'received'}`}
                 >
-                  <div className="message-content">
-                    <div className="message-text">
-                      {renderMessageContent(msg)}
-                    </div>
-                    <div className="message-time">
-                      {new Date(msg.timestamp).toLocaleString('th-TH', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
+                  <div className="message-text">
+                    {renderMessageContent(msg)}
+                  </div>
+                  <div className="message-time">
+                    {new Date(Number(msg.timestamp)).toLocaleString('th-TH', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </div>
                 </div>
               ))}
@@ -846,9 +1166,9 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                 style={{ display: 'none' }}
                 onChange={handleImageSelect}
               />
-              
-              <button 
-                type="button" 
+
+              <button
+                type="button"
                 className="btn-attach"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
@@ -856,9 +1176,9 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
               >
                 📎
               </button>
-              
-              <button 
-                type="button" 
+
+              <button
+                type="button"
                 className="btn-sticker"
                 onClick={() => setShowStickerPicker(!showStickerPicker)}
                 disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
@@ -866,12 +1186,22 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
               >
                 😊
               </button>
-              
+
+              <button
+                type="button"
+                className="btn-sticker"
+                onClick={() => setShowQuickReplies(!showQuickReplies)}
+                disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
+                title="ชุดคำตอบสำเร็จรูป"
+              >
+                📝
+              </button>
+
               {imagePreview && (
                 <div className="image-preview">
                   <img src={imagePreview} alt="Preview" />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn-remove-image"
                     onClick={handleRemoveImage}
                   >
@@ -879,26 +1209,28 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                   </button>
                 </div>
               )}
-              
+
               <input
                 type="text"
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 placeholder={
                   currentUser.role !== 'admin' && !licenseStatus?.isValid
-                    ? "License หมดอายุ - ไม่สามารถส่งข้อความได้"
+                    ? currentUser.role === 'agent'
+                      ? "License หมดอายุ - ติดต่อเจ้าของบัญชี"
+                      : "License หมดอายุ - ไม่สามารถส่งข้อความได้"
                     : "พิมพ์ข้อความ..."
                 }
                 disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
               />
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={loading || (!messageText.trim() && !selectedImage) || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
               >
                 {loading ? 'กำลังส่ง...' : 'ส่ง'}
               </button>
             </form>
-            
+
             {showStickerPicker && (
               <div className="sticker-picker">
                 <div className="sticker-picker-header">
@@ -929,12 +1261,12 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                     { packageId: '11537', stickerId: '52002752' },
                     { packageId: '11537', stickerId: '52002753' }
                   ].map((sticker, index) => (
-                    <div 
-                      key={index} 
+                    <div
+                      key={index}
                       className="sticker-item"
                       onClick={() => handleSendSticker(sticker.packageId, sticker.stickerId)}
                     >
-                      <img 
+                      <img
                         src={`https://stickershop.line-scdn.net/stickershop/v1/sticker/${sticker.stickerId}/android/sticker.png`}
                         alt={`Sticker ${index + 1}`}
                         onError={(e) => {
@@ -946,34 +1278,133 @@ const filteredConversations = sortedConversations.filter(([conversationKey, user
                 </div>
               </div>
             )}
+
+            {showQuickReplies && (
+              <div className="quick-reply-picker">
+                <div className="quick-reply-picker-header">
+                  <span>ชุดคำตอบสำเร็จรูป</span>
+                  <button onClick={() => setShowQuickReplies(false)}>✕</button>
+                </div>
+                <div className="quick-reply-search">
+                  <input
+                    type="text"
+                    placeholder="ค้นหาชุดคำตอบ..."
+                    value={quickReplySearch}
+                    onChange={(e) => setQuickReplySearch(e.target.value)}
+                  />
+                </div>
+                <div className="quick-reply-list">
+                  {filteredQuickReplies.length === 0 ? (
+                    <div className="no-quick-replies">
+                      <p>ไม่พบชุดคำตอบ</p>
+                    </div>
+                  ) : (
+                    filteredQuickReplies.map((qr) => (
+                      <div
+                        key={qr.id}
+                        className="quick-reply-item"
+                        onClick={() => handleSelectQuickReply(qr)}
+                      >
+                        <div className="quick-reply-title">
+                          {qr.messageType === 'image' && '🖼️ '}
+                          {qr.messageType === 'sticker' && '🎨 '}
+                          {qr.title}
+                        </div>
+                        <div className="quick-reply-message">
+                          {qr.messageType === 'text' && qr.message}
+                          {qr.messageType === 'image' && '[รูปภาพ]'}
+                          {qr.messageType === 'sticker' && '[สติกเกอร์]'}
+                        </div>
+                        <div className="quick-reply-category">{qr.category}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
       {/* Modal สร้างกลุ่ม */}
-        {showGroupModal && (
-          <div className="modal-overlay" onClick={() => setShowGroupModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h3>สร้างกลุ่มใหม่</h3>
-              <p>เลือก {selectedConversations.length} conversation(s)</p>
-              <input
-                type="text"
-                className="group-name-input"
-                placeholder="ชื่อกลุ่ม (เช่น VIP1)"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                autoFocus
-              />
-              <div className="modal-buttons">
-                <button className="btn-confirm" onClick={handleCreateGroup}>
-                  สร้าง
-                </button>
-                <button className="btn-cancel" onClick={() => setShowGroupModal(false)}>
-                  ยกเลิก
-                </button>
-              </div>
+      {showGroupModal && (
+        <div className="modal-overlay" onClick={() => setShowGroupModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>สร้างกลุ่มใหม่</h3>
+            <p>เลือก {selectedConversations.length} conversation(s)</p>
+            <input
+              type="text"
+              className="group-name-input"
+              placeholder="ชื่อกลุ่ม (เช่น VIP1)"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              autoFocus
+            />
+            <div className="modal-buttons">
+              <button className="btn-confirm" onClick={handleCreateGroup}>
+                สร้าง
+              </button>
+              <button className="btn-cancel" onClick={() => setShowGroupModal(false)}>
+                ยกเลิก
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Modal จบแชท */}
+      {showArchiveModal && (
+        <div className="modal-overlay" onClick={() => setShowArchiveModal(false)}>
+          <div className="modal-content archive-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon archive">📦</div>
+            <h3>ยืนยันการจบแชท</h3>
+            <p className="modal-subtitle">
+              แชทนี้จะถูกย้ายไปที่หน้า <strong>"จบแชท"</strong> และจะไม่ปรากฏในรายการแชทปัจจุบัน
+            </p>
+
+            <div className="modal-field">
+              <label>บันทึกเพิ่มเติม (ไม่บังคับ)</label>
+              <textarea
+                className="archive-note-input"
+                placeholder="ใส่รายละเอียดเกี่ยวกับการจบแชทนี้..."
+                value={archiveNote}
+                onChange={(e) => setArchiveNote(e.target.value)}
+                disabled={archiveLoading}
+              />
+            </div>
+
+            <div className="modal-buttons">
+              <button
+                className="btn-confirm archive"
+                onClick={handleArchiveConversation}
+                disabled={archiveLoading}
+              >
+                {archiveLoading ? 'กำลังบันทึก...' : 'ยืนยันจบแชท'}
+              </button>
+              <button
+                className="btn-cancel"
+                onClick={() => {
+                  setShowArchiveModal(false);
+                  setArchiveNote('');
+                }}
+                disabled={archiveLoading}
+              >
+                ยกเลิก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, action: null, data: null })}
+        onConfirm={handleDialogConfirm}
+        title="ยืนยันการลบกลุ่ม"
+        message="ต้องการลบกลุ่มนี้หรือไม่?"
+        type="warning"
+        confirmText="ลบกลุ่ม"
+      />
     </div>
   );
 }

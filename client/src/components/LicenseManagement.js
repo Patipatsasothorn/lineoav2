@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import './LicenseManagement.css';
 
 function LicenseManagement({ currentUser }) {
@@ -111,7 +112,7 @@ function LicenseManagement({ currentUser }) {
     navigator.clipboard.writeText(text).then(() => {
       alert('📋 คัดลอกแล้ว: ' + text);
     }).catch(() => {
-      alert('❌ ไม่สามารถคัดลอกได้');
+      toast.error('ไม่สามารถคัดลอกได้');
     });
   };
 

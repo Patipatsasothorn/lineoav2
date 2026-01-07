@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import './Register.css';
 
 function Register({ onBackToLogin }) {
@@ -54,8 +55,16 @@ function Register({ onBackToLogin }) {
       const registerData = await registerResponse.json();
 
       if (registerData.success) {
-        alert('ลงทะเบียนสำเร็จ! กรุณาเข้าสู่ระบบ');
-        onBackToLogin();
+        toast.success(
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <strong>🎉 ลงทะเบียนสำเร็จ!</strong>
+            <span>กรุณาเข้าสู่ระบบเพื่อเริ่มใช้งาน</span>
+          </div>,
+          { duration: 4000 }
+        );
+        setTimeout(() => {
+          onBackToLogin();
+        }, 1000);
       } else {
         setError(registerData.message || 'ลงทะเบียนไม่สำเร็จ');
       }
@@ -71,7 +80,7 @@ function Register({ onBackToLogin }) {
     <div className="register-container">
       <div className="register-box">
         <h1 className="register-title">ลงทะเบียนใช้งาน</h1>
-        <p className="register-subtitle">LineOA v2 - ระบบจัดการ LINE Official Account</p>
+        <p className="register-subtitle">QO Chat - ระบบจัดการแชทบริการลูกค้า</p>
         
         <form onSubmit={handleSubmit} className="register-form">
           <div className="form-group">

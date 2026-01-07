@@ -1,0 +1,461 @@
+import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import './ArchivedChats.css';
+
+function ArchivedChats({ currentUser }) {
+  const [archivedConversations, setArchivedConversations] = useState([]);
+  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [selectedArchive, setSelectedArchive] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  console.log('🎯 [ArchivedChats] Component mounted');
+  console.log('🎯 [ArchivedChats] currentUser:', currentUser);
+
+  useEffect(() => {
+    console.log('🔄 [ArchivedChats] useEffect triggered');
+    console.log('🔄 [ArchivedChats] currentUser in useEffect:', currentUser);
+
+    if (currentUser) {
+      fetchArchivedConversations();
+    } else {
+      console.warn('⚠️ [ArchivedChats] No currentUser, skipping fetch');
+    }
+  }, [currentUser]);
+
+  const fetchArchivedConversations = async () => {
+    try {
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const url = `http://localhost:5000/api/conversations/archived?${param}`;
+
+      console.log('📥 [ArchivedChats] Fetching archived conversations...');
+      console.log('📥 [ArchivedChats] Current user:', currentUser);
+      console.log('📥 [ArchivedChats] Is agent:', isAgent);
+      console.log('📥 [ArchivedChats] URL:', url);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      console.log('📥 [ArchivedChats] Response status:', response.status);
+      console.log('📥 [ArchivedChats] Response data:', data);
+
+      if (data.success) {
+        console.log('📥 [ArchivedChats] Setting archived conversations:', data.archivedConversations);
+        console.log('📥 [ArchivedChats] Number of archives:', data.archivedConversations.length);
+        setArchivedConversations(data.archivedConversations);
+      } else {
+        console.warn('📥 [ArchivedChats] Request failed:', data.message);
+      }
+    } catch (error) {
+      console.error('❌ [ArchivedChats] Error fetching archived conversations:', error);
+    }
+  };
+
+  const fetchArchivedMessages = async (archiveId) => {
+    setLoading(true);
+    try {
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const url = `http://localhost:5000/api/conversations/archived/${archiveId}/messages?${param}`;
+
+      console.log('📨 [ArchivedChats] Fetching messages for archiveId:', archiveId);
+      console.log('📨 [ArchivedChats] URL:', url);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      console.log('📨 [ArchivedChats] Response:', data);
+
+      if (data.success) {
+        setSelectedArchive(data.archive);
+        setMessages(data.messages);
+      } else {
+        toast.error('ไม่พบแชทที่เก็บไว้: ' + data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching archived messages:', error);
+      toast.error('เกิดข้อผิดพลาดในการโหลดข้อความ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreConversation = async (archiveId) => {
+    if (!window.confirm('ต้องการนำแชทนี้กลับมาใช้งานหรือไม่?')) {
+      return;
+    }
+
+    try {
+      const isAgent = currentUser.role === 'agent';
+      const requestBody = isAgent
+        ? { agentId: currentUser.id }
+        : { userId: currentUser.id };
+
+      console.log('↩️ [ArchivedChats] Restoring archive:', archiveId);
+      console.log('↩️ [ArchivedChats] Request body:', requestBody);
+
+      const response = await fetch(`http://localhost:5000/api/conversations/restore/${archiveId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('นำแชทกลับมาเรียบร้อย!');
+        fetchArchivedConversations();
+        setSelectedArchive(null);
+        setMessages([]);
+      } else {
+        toast.error('นำแชทกลับไม่สำเร็จ: ' + data.message);
+      }
+    } catch (error) {
+      console.error('Error restoring conversation:', error);
+      toast.error('เกิดข้อผิดพลาดในการนำแชทกลับ');
+    }
+  };
+
+  const handleDeleteConversation = async (archiveId) => {
+    if (!window.confirm('ต้องการลบแชทนี้ถาวรหรือไม่?\n\n⚠️ ข้อมูลที่ลบแล้วจะไม่สามารถกลับคืนได้!')) {
+      return;
+    }
+
+    try {
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const url = `http://localhost:5000/api/conversations/archived/${archiveId}?${param}`;
+
+      console.log('🗑️ [ArchivedChats] Deleting archive:', archiveId);
+      console.log('🗑️ [ArchivedChats] URL:', url);
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('ลบแชทเรียบร้อย!');
+        fetchArchivedConversations();
+        setSelectedArchive(null);
+        setMessages([]);
+      } else {
+        toast.error('ลบแชทไม่สำเร็จ: ' + data.message);
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      toast.error('เกิดข้อผิดพลาดในการลบแชท');
+    }
+  };
+
+  const renderMessageContent = (msg) => {
+    if (msg.messageType === 'image' && msg.imageUrl) {
+      const fullImageUrl = msg.imageUrl.startsWith('http')
+        ? msg.imageUrl
+        : `http://localhost:5000${msg.imageUrl}`;
+
+      return (
+        <div className="message-image">
+          <img
+            src={fullImageUrl}
+            alt="Sent image"
+            style={{ maxWidth: '300px', maxHeight: '300px', borderRadius: '8px' }}
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          <span style={{ display: 'none' }}>[รูปภาพ]</span>
+        </div>
+      );
+    }
+
+    if (msg.messageType === 'sticker' && msg.stickerId) {
+      const stickerUrl = `https://stickershop.line-scdn.net/stickershop/v1/sticker/${msg.stickerId}/android/sticker.png`;
+
+      return (
+        <div className="message-sticker">
+          <img
+            src={stickerUrl}
+            alt="Sticker"
+            style={{ width: '150px', height: '150px' }}
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          <span style={{ display: 'none' }}>{msg.text}</span>
+        </div>
+      );
+    }
+
+    return msg.text;
+  };
+
+  // จัดกลุ่มแชทตาม Channel
+  const groupedByChannel = archivedConversations.reduce((acc, archive) => {
+    const channelName = archive.channelName;
+    if (!acc[channelName]) {
+      acc[channelName] = [];
+    }
+    acc[channelName].push(archive);
+    return acc;
+  }, {});
+
+  // กรองตาม search query
+  const filteredChannels = Object.keys(groupedByChannel).filter(channelName =>
+    channelName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // ถ้าเลือก channel แล้ว ให้แสดงแชทใน channel นั้น
+  const chatsInSelectedChannel = selectedChannel ? groupedByChannel[selectedChannel] || [] : [];
+
+  return (
+    <div className="archived-chats-container">
+      <div className="archived-sidebar">
+        {!selectedChannel ? (
+          <>
+            <div className="sidebar-header">
+              <div className="header-content">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <h2>Channels</h2>
+              </div>
+              <div className="header-badge">
+                {Object.keys(groupedByChannel).length}
+              </div>
+            </div>
+
+            <div className="search-box">
+              <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="ค้นหา Channel..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+              {searchQuery && (
+                <button
+                  className="search-clear"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {archivedConversations.length === 0 ? (
+              <div className="no-archives">
+                <div className="empty-icon">📦</div>
+                <p className="empty-title">ยังไม่มีแชทที่เก็บไว้</p>
+                <p className="empty-subtitle">แชทที่จบแล้วจะปรากฏที่นี่</p>
+              </div>
+            ) : filteredChannels.length === 0 ? (
+              <div className="no-archives">
+                <div className="empty-icon">🔍</div>
+                <p className="empty-title">ไม่พบผลลัพธ์</p>
+                <p className="empty-subtitle">ลองค้นหาด้วยคำอื่น</p>
+              </div>
+            ) : (
+              <div className="archived-list">
+                {filteredChannels.map((channelName, index) => {
+                  const channelArchives = groupedByChannel[channelName];
+                  const totalMessages = channelArchives.reduce((sum, archive) => sum + archive.messageCount, 0);
+
+                  return (
+                    <div
+                      key={channelName}
+                      className="archived-item channel-item"
+                      onClick={() => setSelectedChannel(channelName)}
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      <div className="archived-header">
+                        <div className="channel-name-wrapper">
+                          <svg className="channel-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                          </svg>
+                          <span className="archived-channel">{channelName}</span>
+                        </div>
+                        <span className="archived-badge">
+                          {channelArchives.length}
+                        </span>
+                      </div>
+                      <div className="archived-info">
+                        <span className="message-count">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                          </svg>
+                          {totalMessages} ข้อความ
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="sidebar-header">
+              <button
+                onClick={() => {
+                  setSelectedChannel(null);
+                  setSelectedArchive(null);
+                  setMessages([]);
+                }}
+                className="back-button"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="19" y1="12" x2="5" y2="12"/>
+                  <polyline points="12 19 5 12 12 5"/>
+                </svg>
+              </button>
+              <h2>{selectedChannel}</h2>
+            </div>
+
+            <div className="archived-list">
+              {chatsInSelectedChannel.map((archive) => (
+                <div
+                  key={archive.id}
+                  className={`archived-item ${selectedArchive?.id === archive.id ? 'active' : ''}`}
+                  onClick={() => fetchArchivedMessages(archive.id)}
+                >
+                  <div className="archived-header">
+                    <span className="archived-channel">
+                      {archive.userName || 'ไม่มีชื่อ'}
+                    </span>
+                    <span className="archived-date">
+                      {new Date(archive.archivedAt).toLocaleDateString('th-TH', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                  <div className="archived-info">
+                    <span className="message-count">📨 {archive.messageCount} ข้อความ</span>
+                  </div>
+                  {archive.note && (
+                    <div className="archived-note">
+                      📝 {archive.note}
+                    </div>
+                  )}
+                  <div className="archived-actions">
+                    <button
+                      className="btn-restore"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRestoreConversation(archive.id);
+                      }}
+                      title="นำแชทกลับมา"
+                    >
+                      ↩️ นำกลับ
+                    </button>
+                    {currentUser.role !== 'agent' && (
+                      <button
+                        className="btn-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteConversation(archive.id);
+                        }}
+                        title="ลบถาวร"
+                      >
+                        🗑️ ลบ
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="archived-main">
+        {!selectedArchive ? (
+          <div className="archived-empty">
+            <h3>เลือกแชทที่เก็บไว้เพื่อดูข้อความ</h3>
+            <p>เลือกแชทจากรายการด้านซ้าย</p>
+          </div>
+        ) : (
+          <>
+            <div className="archived-chat-header">
+              <div>
+                <h3>แชทที่เก็บไว้</h3>
+                <span className="archive-info-text">
+                  Channel: {selectedArchive.channelName} |
+                  เก็บเมื่อ: {new Date(selectedArchive.archivedAt).toLocaleString('th-TH')}
+                </span>
+              </div>
+              <div className="header-actions">
+                <button
+                  className="btn-restore-large"
+                  onClick={() => handleRestoreConversation(selectedArchive.id)}
+                >
+                  ↩️ นำกลับมาใช้งาน
+                </button>
+                {currentUser.role !== 'agent' && (
+                  <button
+                    className="btn-delete-large"
+                    onClick={() => handleDeleteConversation(selectedArchive.id)}
+                  >
+                    🗑️ ลบถาวร
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="loading-messages">
+                <p>กำลังโหลดข้อความ...</p>
+              </div>
+            ) : (
+              <div className="archived-messages-container">
+                {messages.length === 0 ? (
+                  <div className="no-messages">
+                    <p>ไม่มีข้อความในแชทนี้</p>
+                  </div>
+                ) : (
+                  messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`message ${msg.type === 'sent' ? 'sent' : 'received'}`}
+                    >
+                      <div className="message-content">
+                        <div className="message-text">
+                          {renderMessageContent(msg)}
+                        </div>
+                        <div className="message-time">
+                          {new Date(msg.timestamp).toLocaleString('th-TH', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default ArchivedChats;
