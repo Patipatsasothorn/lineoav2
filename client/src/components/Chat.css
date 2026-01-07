@@ -798,6 +798,7 @@
 }
 
 /* Image and Sticker Styles */
+.btn-quick-reply,
 .btn-attach,
 .btn-sticker {
   background: #f7fafc;
@@ -814,16 +815,30 @@
   margin-right: 8px;
 }
 
+.btn-quick-reply:hover,
 .btn-attach:hover,
 .btn-sticker:hover {
   background: #edf2f7;
   border-color: #cbd5e0;
 }
 
+.btn-quick-reply:disabled,
 .btn-attach:disabled,
 .btn-sticker:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-quick-reply {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+}
+
+.btn-quick-reply:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
 }
 
 .image-preview {
@@ -876,6 +891,158 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Quick Reply Picker */
+.quick-reply-picker {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 450px;
+  max-height: 500px;
+  z-index: 1000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-reply-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.quick-reply-picker-header span {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.quick-reply-picker-header button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: white;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.quick-reply-picker-header button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.quick-reply-search {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f7fafc;
+}
+
+.quick-reply-search input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+  box-sizing: border-box;
+}
+
+.quick-reply-search input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.quick-reply-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  max-height: 380px;
+}
+
+.quick-reply-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-reply-item:hover {
+  background: #f7fafc;
+  border-color: #667eea;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.quick-reply-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.quick-reply-category {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.quick-reply-type {
+  font-size: 16px;
+}
+
+.quick-reply-title {
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.quick-reply-preview {
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-reply-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #718096;
+}
+
+.quick-reply-empty p {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.quick-reply-empty small {
+  font-size: 13px;
+  color: #a0aec0;
 }
 
 /* Sticker Picker */
@@ -988,6 +1155,17 @@
 @media (max-width: 768px) {
   .chat-container {
     position: relative;
+  }
+
+  /* Quick Reply Picker - Mobile responsive */
+  .quick-reply-picker {
+    width: 90%;
+    max-width: 350px;
+    max-height: 450px;
+  }
+
+  .quick-reply-list {
+    max-height: 320px;
   }
 
   /* Sidebar - Full width on mobile */

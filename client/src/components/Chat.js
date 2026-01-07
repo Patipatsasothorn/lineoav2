@@ -24,6 +24,9 @@ function Chat({ currentUser }) {
   const [showArchiveModal, setShowArchiveModal] = useState(false); // Modal สำหรับจบแชท
   const [archiveNote, setArchiveNote] = useState(''); // โน้ตสำหรับจบแชท
   const [archiveLoading, setArchiveLoading] = useState(false); // สถานะ loading ของการจบแชท
+  const [quickReplies, setQuickReplies] = useState([]); // ชุดคำตอบสำเร็จรูป
+  const [showQuickReplies, setShowQuickReplies] = useState(false); // แสดง/ซ่อน dropdown
+  const [quickReplySearch, setQuickReplySearch] = useState(''); // ค้นหา quick reply
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -42,6 +45,7 @@ function Chat({ currentUser }) {
       fetchGroups();
       fetchLicenseStatus(); // ตรวจสอบสถานะ license
       fetchPinnedConversations(); // ดึงการสนทนาที่ปักหมุด
+      fetchQuickReplies(); // ดึงชุดคำตอบสำเร็จรูป
     }
     // เชื่อมต่อ SSE สำหรับ real-time updates
     eventSourceRef.current = new EventSource('http://localhost:5000/api/messages/stream');
@@ -150,6 +154,86 @@ function Chat({ currentUser }) {
       console.error('Error fetching pinned conversations:', error);
     }
   };
+
+  const fetchQuickReplies = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/quick-replies?userId=${currentUser.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setQuickReplies(data.quickReplies);
+      }
+    } catch (error) {
+      console.error('Error fetching quick replies:', error);
+    }
+  };
+
+  const handleSelectQuickReply = async (quickReply) => {
+    if (quickReply.messageType === 'text') {
+      setMessageText(quickReply.message);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    } else if (quickReply.messageType === 'image') {
+      // ส่งรูปภาพทันที
+      await handleSendImageFromQuickReply(quickReply.message);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    } else if (quickReply.messageType === 'sticker') {
+      handleSendSticker(quickReply.stickerPackageId, quickReply.stickerId);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    }
+  };
+
+  const handleSendImageFromQuickReply = async (imageUrl) => {
+    if (!selectedUser || !selectedChannel) {
+      alert('กรุณาเลือกห้องแชทก่อน');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channelId: selectedChannel,
+          userId: selectedUser,
+          text: '[รูปภาพ]',
+          messageType: 'image',
+          imageUrl: imageUrl,
+          senderId: currentUser.id
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        if (data.code === 'LICENSE_EXPIRED') {
+          if (currentUser.role === 'agent') {
+            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
+          } else {
+            alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาเปิดใช้งาน License ใหม่ในหน้าตั้งค่า');
+          }
+        } else {
+          alert('ส่งรูปภาพไม่สำเร็จ: ' + data.message);
+        }
+      }
+    } catch (err) {
+      console.error('Error sending image from quick reply:', err);
+      alert('เกิดข้อผิดพลาดในการส่งรูปภาพ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredQuickReplies = quickReplies.filter(qr =>
+    qr.title.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+    qr.message.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+    qr.category.toLowerCase().includes(quickReplySearch.toLowerCase())
+  );
 
   const togglePinConversation = async (conversationKey) => {
     try {
@@ -976,6 +1060,16 @@ function Chat({ currentUser }) {
 
               <button
                 type="button"
+                className="btn-quick-reply"
+                onClick={() => setShowQuickReplies(!showQuickReplies)}
+                disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
+                title="ชุดคำตอบสำเร็จรูป"
+              >
+                📝
+              </button>
+
+              <button
+                type="button"
                 className="btn-attach"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
@@ -1027,6 +1121,55 @@ function Chat({ currentUser }) {
                 {loading ? 'กำลังส่ง...' : 'ส่ง'}
               </button>
             </form>
+
+            {showQuickReplies && (
+              <div className="quick-reply-picker">
+                <div className="quick-reply-picker-header">
+                  <span>📝 ชุดคำตอบสำเร็จรูป</span>
+                  <button onClick={() => setShowQuickReplies(false)}>✕</button>
+                </div>
+                <div className="quick-reply-search">
+                  <input
+                    type="text"
+                    placeholder="🔍 ค้นหาชุดคำตอบ..."
+                    value={quickReplySearch}
+                    onChange={(e) => setQuickReplySearch(e.target.value)}
+                  />
+                </div>
+                <div className="quick-reply-list">
+                  {filteredQuickReplies.length === 0 ? (
+                    <div className="quick-reply-empty">
+                      <p>ไม่พบชุดคำตอบ</p>
+                      <small>ไปที่เมนู "ชุดคำตอบ" เพื่อเพิ่มชุดคำตอบใหม่</small>
+                    </div>
+                  ) : (
+                    filteredQuickReplies.map((qr) => (
+                      <div
+                        key={qr.id}
+                        className="quick-reply-item"
+                        onClick={() => handleSelectQuickReply(qr)}
+                      >
+                        <div className="quick-reply-item-header">
+                          <span className="quick-reply-category">{qr.category}</span>
+                          <span className="quick-reply-type">
+                            {qr.messageType === 'text' && '💬'}
+                            {qr.messageType === 'image' && '🖼️'}
+                            {qr.messageType === 'sticker' && '😊'}
+                          </span>
+                        </div>
+                        <div className="quick-reply-title">{qr.title}</div>
+                        <div className="quick-reply-preview">
+                          {qr.messageType === 'text' && qr.message.substring(0, 50)}
+                          {qr.messageType === 'image' && '[รูปภาพ]'}
+                          {qr.messageType === 'sticker' && `[สติกเกอร์ ${qr.stickerPackageId}/${qr.stickerId}]`}
+                          {qr.message.length > 50 && '...'}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             {showStickerPicker && (
               <div className="sticker-picker">
