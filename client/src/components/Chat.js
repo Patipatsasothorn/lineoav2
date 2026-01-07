@@ -1189,7 +1189,7 @@ function Chat({ currentUser }) {
 
               <button
                 type="button"
-                className="btn-quick-reply"
+                className="btn-sticker"
                 onClick={() => setShowQuickReplies(!showQuickReplies)}
                 disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
                 title="ชุดคำตอบสำเร็จรูป"

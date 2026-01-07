@@ -218,47 +218,98 @@ function Chatbot({ currentUser }) {
       )}
 
       <div className="auto-replies-list">
-        <h2>รายการข้อความตอบกลับอัตโนมัติ ({autoReplies.length})</h2>
+        <div className="list-header">
+          <h2>รายการข้อความตอบกลับอัตโนมัติ</h2>
+          <span className="count-badge">{autoReplies.length} รายการ</span>
+        </div>
 
         {autoReplies.length === 0 ? (
           <div className="empty-state">
-            <p>ยังไม่มีข้อความตอบกลับอัตโนมัติ</p>
-            <p>กดปุ่ม "+ เพิ่มข้อความตอบกลับ" เพื่อเพิ่มข้อความแรก</p>
+            <div className="empty-icon">🤖</div>
+            <p className="empty-title">ยังไม่มีข้อความตอบกลับอัตโนมัติ</p>
+            <p className="empty-subtitle">กดปุ่ม "+ เพิ่มข้อความตอบกลับ" เพื่อเริ่มต้นใช้งาน</p>
           </div>
         ) : (
           <div className="auto-replies-grid">
-            {autoReplies.map((reply) => (
-              <div key={reply.id} className="reply-card">
+            {autoReplies.map((reply, index) => (
+              <div key={reply.id} className="reply-card" style={{ animationDelay: `${index * 0.1}s` }}>
                 <div className="reply-header">
-                  <h3>🔑 {reply.keyword}</h3>
+                  <div className="keyword-section">
+                    <span className="keyword-icon">🔑</span>
+                    <h3 className="keyword-text">{reply.keyword || '(ไม่มี keyword)'}</h3>
+                  </div>
                   <button
                     className="delete-button"
                     onClick={() => handleDelete(reply.id)}
+                    title="ลบข้อความตอบกลับ"
                   >
-                    ✕
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                    </svg>
                   </button>
                 </div>
+
                 <div className="reply-info">
-                  <div className="info-item">
-                    <span className="label">ประเภท:</span>
-                    <span className="value">{reply.replyType === 'text' ? '📝 ข้อความ' : '🖼️ รูปภาพ'}</span>
+                  <div className="type-badge">
+                    {reply.messageType === 'text' && '📝 ข้อความ'}
+                    {reply.messageType === 'image' && '🖼️ รูปภาพ'}
+                    {reply.messageType === 'sticker' && '🎨 สติกเกอร์'}
+                    {!reply.messageType && (reply.replyType === 'text' ? '📝 ข้อความ' : '🖼️ รูปภาพ')}
                   </div>
-                  {reply.replyType === 'text' ? (
+
+                  {(reply.messageType === 'text' || reply.replyType === 'text') && (
                     <div className="reply-content">
-                      <span className="label">ข้อความตอบกลับ:</span>
-                      <p>{reply.replyText}</p>
-                    </div>
-                  ) : (
-                    <div className="reply-content">
-                      <span className="label">รูปภาพ:</span>
-                      <img src={reply.replyImage} alt="Reply" className="reply-image" />
+                      <div className="content-label">ข้อความตอบกลับ</div>
+                      <p className="content-text">{reply.reply || reply.replyText}</p>
                     </div>
                   )}
-                  <div className="info-item">
-                    <span className="label">สร้างเมื่อ:</span>
-                    <span className="value">
-                      {new Date(reply.createdAt).toLocaleString('th-TH')}
-                    </span>
+
+                  {(reply.messageType === 'image' || reply.replyType === 'image') && (
+                    <div className="reply-content image-content">
+                      <div className="content-label">รูปภาพ</div>
+                      <div className="image-wrapper">
+                        <img
+                          src={reply.imageUrl || reply.replyImage}
+                          alt="Auto Reply"
+                          className="reply-image"
+                          onError={(e) => e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Found'}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {reply.messageType === 'sticker' && reply.stickerId && (
+                    <div className="reply-content sticker-content">
+                      <div className="content-label">สติกเกอร์</div>
+                      <div className="sticker-wrapper">
+                        <img
+                          src={`https://stickershop.line-scdn.net/stickershop/v1/sticker/${reply.stickerId}/android/sticker.png`}
+                          alt="Sticker"
+                          className="reply-sticker"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="reply-footer">
+                    <div className="footer-item">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                      <span>{new Date(reply.createdAt).toLocaleString('th-TH', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}</span>
+                    </div>
+                    {reply.isActive !== undefined && (
+                      <div className={`status-badge ${reply.isActive ? 'active' : 'inactive'}`}>
+                        {reply.isActive ? '✓ ใช้งาน' : '✕ ปิดใช้งาน'}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

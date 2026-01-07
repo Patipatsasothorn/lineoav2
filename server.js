@@ -132,12 +132,19 @@ async function checkAutoReply(text, userId) {
     const pool = await poolPromise;
     const result = await pool.request()
       .input('userId', sql.NVarChar, userId)
-      .query('SELECT TOP 1 * FROM AutoReplies WHERE userId = @userId AND isActive = 1');
+      .query('SELECT * FROM AutoReplies WHERE userId = @userId AND isActive = 1 ORDER BY LEN(keyword) DESC, createdAt DESC');
 
     if (result.recordset.length > 0) {
-      const rule = result.recordset[0];
-      if (text.toLowerCase().includes(rule.keyword.toLowerCase())) {
-        return rule;
+      // Find the first rule that matches (check all rules, prioritize longer keywords)
+      for (const rule of result.recordset) {
+        // If keyword is empty, skip matching
+        if (!rule.keyword || rule.keyword.trim() === '') {
+          continue;
+        }
+        // Check if text contains the keyword (case-insensitive)
+        if (text.toLowerCase().includes(rule.keyword.toLowerCase())) {
+          return rule;
+        }
       }
     }
     return null;
@@ -700,33 +707,83 @@ app.post('/webhook/:channelId', async (req, res) => {
           if (messageType === 'text') {
             const matchedRule = await checkAutoReply(messageText, channel.userId);
             if (matchedRule) {
-              console.log(`🤖 Auto reply triggered`);
+              console.log(`🤖 Auto reply triggered (${matchedRule.messageType || 'text'})`);
 
 
               try {
-                await client.replyMessage(event.replyToken, {
-                  type: 'text',
-                  text: matchedRule.reply
-                });
+                // Build LINE message based on messageType
+                let lineMessage;
+                let displayText = matchedRule.reply;
+
+                if (matchedRule.messageType === 'image' && matchedRule.imageUrl) {
+                  // Send image
+                  lineMessage = {
+                    type: 'image',
+                    originalContentUrl: matchedRule.imageUrl,
+                    previewImageUrl: matchedRule.imageUrl
+                  };
+                  displayText = '[รูปภาพ]';
+                } else if (matchedRule.messageType === 'sticker' && matchedRule.stickerPackageId && matchedRule.stickerId) {
+                  // Send sticker
+                  lineMessage = {
+                    type: 'sticker',
+                    packageId: matchedRule.stickerPackageId,
+                    stickerId: matchedRule.stickerId
+                  };
+                  displayText = `[สติกเกอร์: ${matchedRule.stickerPackageId}/${matchedRule.stickerId}]`;
+                } else {
+                  // Send text (default)
+                  lineMessage = {
+                    type: 'text',
+                    text: matchedRule.reply
+                  };
+                }
+
+                await client.replyMessage(event.replyToken, lineMessage);
 
 
                 // Save auto reply message
                 const autoReplyId = Date.now().toString() + Math.random();
+                const autoReplyTimestamp = Date.now();
+
                 await pool.request()
                   .input('id', sql.NVarChar, autoReplyId)
                   .input('channelId', sql.NVarChar, channelId)
                   .input('channelName', sql.NVarChar, channel.channelName)
                   .input('userId', sql.NVarChar, event.source.userId)
                   .input('userName', sql.NVarChar, 'Auto Reply')
-                  .input('text', sql.NVarChar, matchedRule.reply)
-                  .input('timestamp', sql.BigInt, Date.now())
+                  .input('text', sql.NVarChar, displayText)
+                  .input('messageType', sql.NVarChar, matchedRule.messageType || 'text')
+                  .input('imageUrl', sql.NVarChar, matchedRule.imageUrl || null)
+                  .input('stickerPackageId', sql.NVarChar, matchedRule.stickerPackageId || null)
+                  .input('stickerId', sql.NVarChar, matchedRule.stickerId || null)
+                  .input('timestamp', sql.BigInt, autoReplyTimestamp)
                   .input('type', sql.NVarChar, 'sent')
                   .input('isAutoReply', sql.Bit, 1)
-                  .query(`INSERT INTO Messages (id, channelId, channelName, userId, userName, text, messageType, timestamp, type, isRead, isAutoReply)
-                          VALUES (@id, @channelId, @channelName, @userId, @userName, @text, 'text', @timestamp, @type, 1, @isAutoReply)`);
+                  .query(`INSERT INTO Messages (id, channelId, channelName, userId, userName, text, messageType, imageUrl, stickerPackageId, stickerId, timestamp, type, isRead, isAutoReply)
+                          VALUES (@id, @channelId, @channelName, @userId, @userName, @text, @messageType, @imageUrl, @stickerPackageId, @stickerId, @timestamp, @type, 1, @isAutoReply)`);
 
+                // Broadcast auto reply message to all connected clients
+                const autoReplyMessage = {
+                  id: autoReplyId,
+                  channelId: channelId,
+                  channelName: channel.channelName,
+                  userId: event.source.userId,
+                  userName: 'Auto Reply',
+                  text: displayText,
+                  messageType: matchedRule.messageType || 'text',
+                  imageUrl: matchedRule.imageUrl || null,
+                  stickerPackageId: matchedRule.stickerPackageId || null,
+                  stickerId: matchedRule.stickerId || null,
+                  timestamp: autoReplyTimestamp,
+                  type: 'sent',
+                  isRead: true,
+                  isAutoReply: true
+                };
 
-                console.log('✓ Auto reply sent');
+                broadcastMessage({ type: 'new_message', message: autoReplyMessage });
+
+                console.log(`✓ Auto reply sent (${matchedRule.messageType || 'text'})`);
               } catch (error) {
                 console.error('Error sending auto reply:', error);
               }
@@ -2520,19 +2577,37 @@ app.post('/api/admin/users/:userId/add-license', async (req, res) => {
 
 // Get Auto Replies
 app.get('/api/auto-replies', async (req, res) => {
-  const { userId } = req.query;
+  const { userId, channelId } = req.query;
 
 
-  if (!userId) {
-    return res.status(400).json({ success: false, message: 'User ID is required' });
+  if (!userId && !channelId) {
+    return res.status(400).json({ success: false, message: 'User ID or Channel ID is required' });
   }
 
 
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT * FROM AutoReplies WHERE userId = @userId ORDER BY createdAt DESC');
+    let result;
+
+    if (channelId) {
+      // Get userId from channelId first
+      const channelResult = await pool.request()
+        .input('channelId', sql.NVarChar, channelId)
+        .query('SELECT userId FROM Channels WHERE id = @channelId');
+
+      if (channelResult.recordset.length === 0) {
+        return res.status(404).json({ success: false, message: 'Channel not found' });
+      }
+
+      const channelUserId = channelResult.recordset[0].userId;
+      result = await pool.request()
+        .input('userId', sql.NVarChar, channelUserId)
+        .query('SELECT * FROM AutoReplies WHERE userId = @userId ORDER BY createdAt DESC');
+    } else {
+      result = await pool.request()
+        .input('userId', sql.NVarChar, userId)
+        .query('SELECT * FROM AutoReplies WHERE userId = @userId ORDER BY createdAt DESC');
+    }
 
 
     res.json({ success: true, autoReplies: result.recordset });
@@ -2544,11 +2619,47 @@ app.get('/api/auto-replies', async (req, res) => {
 
 // Create Auto Reply
 app.post('/api/auto-replies', async (req, res) => {
-  const { keyword, reply, userId, isActive } = req.body;
+  let { keyword, reply, userId, isActive, messageType, replyType, imageUrl, stickerPackageId, stickerId, channelId, replyText, replyImage } = req.body;
 
 
-  if (!keyword || !reply || !userId) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  // Support both formats:
+  // 1. Direct: {reply, userId, ...}
+  // 2. From UI: {replyText, channelId, replyType, replyImage, ...}
+
+  // If replyText is provided, use it as reply
+  if (replyText && !reply) {
+    reply = replyText;
+  }
+
+  // If channelId is provided, get userId from channel
+  if (channelId && !userId) {
+    try {
+      const pool = await poolPromise;
+      const channelResult = await pool.request()
+        .input('channelId', sql.NVarChar, channelId)
+        .query('SELECT userId FROM Channels WHERE id = @channelId');
+
+      if (channelResult.recordset.length > 0) {
+        userId = channelResult.recordset[0].userId;
+      }
+    } catch (error) {
+      console.error('Error getting userId from channelId:', error);
+    }
+  }
+
+  // If replyImage is provided and not empty, use it as imageUrl and set messageType
+  if (replyImage && replyImage.trim() !== '') {
+    imageUrl = replyImage;
+    messageType = 'image';
+    // For image type, use imageUrl as reply if reply is empty
+    if (!reply || reply.trim() === '') {
+      reply = imageUrl;
+    }
+  }
+
+  // Only reply and userId are required now (keyword is optional)
+  if (!reply || !userId) {
+    return res.status(400).json({ success: false, message: 'Missing required fields: reply and userId' });
   }
 
 
@@ -2556,21 +2667,32 @@ app.post('/api/auto-replies', async (req, res) => {
     const pool = await poolPromise;
     const newRuleId = Date.now().toString();
 
+    // Set default messageType if not provided
+    const finalMessageType = messageType || 'text';
+    const finalReplyType = replyType || null;
+    // If no keyword provided, use empty string or auto-generate
+    const finalKeyword = keyword || '';
+
 
     await pool.request()
       .input('id', sql.NVarChar, newRuleId)
-      .input('keyword', sql.NVarChar, keyword)
+      .input('keyword', sql.NVarChar, finalKeyword)
       .input('reply', sql.NVarChar, reply)
       .input('userId', sql.NVarChar, userId)
       .input('isActive', sql.Bit, isActive !== false ? 1 : 0)
-      .query(`INSERT INTO AutoReplies (id, keyword, reply, userId, isActive, createdAt)
-              VALUES (@id, @keyword, @reply, @userId, @isActive, GETDATE())`);
+      .input('messageType', sql.NVarChar, finalMessageType)
+      .input('replyType', sql.NVarChar, finalReplyType)
+      .input('imageUrl', sql.NVarChar, imageUrl || null)
+      .input('stickerPackageId', sql.NVarChar, stickerPackageId || null)
+      .input('stickerId', sql.NVarChar, stickerId || null)
+      .query(`INSERT INTO AutoReplies (id, keyword, reply, userId, isActive, messageType, replyType, imageUrl, stickerPackageId, stickerId, createdAt)
+              VALUES (@id, @keyword, @reply, @userId, @isActive, @messageType, @replyType, @imageUrl, @stickerPackageId, @stickerId, GETDATE())`);
 
 
-    console.log(`✓ Auto reply created: "${keyword}" -> "${reply}"`);
+    console.log(`✓ Auto reply created: "${finalKeyword}" -> "${reply}" (${finalMessageType})`);
 
 
-    res.json({ success: true, message: 'Auto reply created successfully', autoReply: { id: newRuleId } });
+    res.json({ success: true, message: 'Auto reply created successfully', autoReply: { id: newRuleId, messageType: finalMessageType } });
   } catch (error) {
     console.error('Create auto reply error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -2580,7 +2702,7 @@ app.post('/api/auto-replies', async (req, res) => {
 // Update Auto Reply
 app.put('/api/auto-replies/:id', async (req, res) => {
   const { id } = req.params;
-  const { keyword, reply, isActive, userId } = req.body;
+  const { keyword, reply, isActive, userId, messageType, replyType, imageUrl, stickerPackageId, stickerId } = req.body;
 
 
   try {
@@ -2616,6 +2738,26 @@ app.put('/api/auto-replies/:id', async (req, res) => {
       updateFields.push('isActive = @isActive');
       request.input('isActive', sql.Bit, isActive ? 1 : 0);
     }
+    if (messageType !== undefined) {
+      updateFields.push('messageType = @messageType');
+      request.input('messageType', sql.NVarChar, messageType);
+    }
+    if (replyType !== undefined) {
+      updateFields.push('replyType = @replyType');
+      request.input('replyType', sql.NVarChar, replyType);
+    }
+    if (imageUrl !== undefined) {
+      updateFields.push('imageUrl = @imageUrl');
+      request.input('imageUrl', sql.NVarChar, imageUrl);
+    }
+    if (stickerPackageId !== undefined) {
+      updateFields.push('stickerPackageId = @stickerPackageId');
+      request.input('stickerPackageId', sql.NVarChar, stickerPackageId);
+    }
+    if (stickerId !== undefined) {
+      updateFields.push('stickerId = @stickerId');
+      request.input('stickerId', sql.NVarChar, stickerId);
+    }
 
 
     if (updateFields.length > 0) {
@@ -2642,16 +2784,25 @@ app.delete('/api/auto-replies/:id', async (req, res) => {
   try {
     const pool = await poolPromise;
 
+    // If userId is provided, check ownership
+    if (userId) {
+      const checkResult = await pool.request()
+        .input('id', sql.NVarChar, id)
+        .input('userId', sql.NVarChar, userId)
+        .query('SELECT id FROM AutoReplies WHERE id = @id AND userId = @userId');
 
-    // Check ownership
-    const checkResult = await pool.request()
-      .input('id', sql.NVarChar, id)
-      .input('userId', sql.NVarChar, userId)
-      .query('SELECT id FROM AutoReplies WHERE id = @id AND userId = @userId');
+      if (checkResult.recordset.length === 0) {
+        return res.status(404).json({ success: false, message: 'Auto reply not found or no permission' });
+      }
+    } else {
+      // If no userId, just check if the auto reply exists
+      const checkResult = await pool.request()
+        .input('id', sql.NVarChar, id)
+        .query('SELECT id FROM AutoReplies WHERE id = @id');
 
-
-    if (checkResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Auto reply not found or no permission' });
+      if (checkResult.recordset.length === 0) {
+        return res.status(404).json({ success: false, message: 'Auto reply not found' });
+      }
     }
 
 
