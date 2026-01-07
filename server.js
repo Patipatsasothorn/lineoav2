@@ -692,7 +692,7 @@ app.post('/webhook/:channelId', async (req, res) => {
 
 // Send Message
 app.post('/api/messages/send', async (req, res) => {
-  const { channelId, userId, text, messageType, imageUrl, stickerPackageId, stickerId, senderId } = req.body;
+  const { channelId, userId, text, messageType, imageUrl, stickerPackageId, stickerId, senderId, clientId } = req.body;
 
 
   try {
@@ -808,11 +808,21 @@ app.post('/api/messages/send', async (req, res) => {
               VALUES (@id, @channelId, @channelName, @userId, @userName, @text, @messageType, @imageUrl, @stickerPackageId, @stickerId, @timestamp, @type, 1)`);
 
 
+    const messageTimestamp = Date.now();
     const newMessage = {
       id: newMessageId,
+      clientId: clientId, // เพิ่ม clientId สำหรับ optimistic update matching
+      channelId: channelId,
+      userId: userId,
+      userName: 'Me',
       text: displayText,
       type: 'sent',
-      timestamp: Date.now()
+      timestamp: messageTimestamp,
+      messageType: messageType || 'text',
+      imageUrl: imageUrl,
+      stickerPackageId: stickerPackageId,
+      stickerId: stickerId,
+      senderId: senderId
     };
 
 

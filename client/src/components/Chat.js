@@ -53,10 +53,26 @@ function Chat({ currentUser }) {
     eventSourceRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'new_message') {
-        // เพิ่มข้อความใหม่ท้าย array (เก่า -> ใหม่)
         setMessages(prevMessages => {
+          // เช็คว่ามี clientId ซ้ำหรือไม่ (สำหรับ optimistic update)
+          const existingIndex = prevMessages.findIndex(msg =>
+            msg.clientId && msg.clientId === data.message.clientId
+          );
+
+          // ถ้าเจอ clientId ซ้ำ แสดงว่าเป็น message ที่เราส่งไปแล้ว ให้อัพเดทแทนที่จะเพิ่มใหม่
+          if (existingIndex !== -1) {
+            console.log('Updating optimistic message with server response');
+            const updatedMessages = [...prevMessages];
+            updatedMessages[existingIndex] = {
+              ...data.message,
+              clientId: data.message.clientId // เก็บ clientId ไว้
+            };
+            return updatedMessages.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+          }
+
+          // ถ้าไม่มี clientId ให้เพิ่ม message ใหม่เข้าไป (เช่น message จากลูกค้า)
           const newMessages = [...prevMessages, data.message];
-          return newMessages.sort((a, b) => a.timestamp - b.timestamp);
+          return newMessages.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
         });
 
         // เล่นเสียงแจ้งเตือน (optional)
@@ -193,6 +209,26 @@ function Chat({ currentUser }) {
     setLoading(true);
 
     try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: '[รูปภาพ]',
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: 'image',
+        imageUrl: imageUrl,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
         headers: {
@@ -204,13 +240,17 @@ function Chat({ currentUser }) {
           text: '[รูปภาพ]',
           messageType: 'image',
           imageUrl: imageUrl,
-          senderId: currentUser.id
+          senderId: currentUser.id,
+          clientId: clientId // ส่ง clientId ไปด้วย
         }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
             alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
@@ -299,6 +339,26 @@ function Chat({ currentUser }) {
         imageUrl = uploadData.imageUrl;
       }
 
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: messageText || '[รูปภาพ]',
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: imageUrl ? 'image' : 'text',
+        imageUrl: imageUrl,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
         headers: {
@@ -310,7 +370,8 @@ function Chat({ currentUser }) {
           text: messageText || '[รูปภาพ]',
           messageType: imageUrl ? 'image' : 'text',
           imageUrl: imageUrl,
-          senderId: currentUser.id // ✨ เพิ่ม senderId
+          senderId: currentUser.id,
+          clientId: clientId // ส่ง clientId ไปด้วย
         }),
       });
 
@@ -321,6 +382,9 @@ function Chat({ currentUser }) {
         setSelectedImage(null);
         setImagePreview(null);
       } else {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         // ตรวจสอบว่าเป็น error จาก license หรือไม่
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
@@ -376,6 +440,27 @@ function Chat({ currentUser }) {
     setShowStickerPicker(false);
 
     try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: `[สติกเกอร์: ${packageId}/${stickerId}]`,
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: 'sticker',
+        stickerPackageId: packageId,
+        stickerId: stickerId,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
         headers: {
@@ -388,13 +473,17 @@ function Chat({ currentUser }) {
           messageType: 'sticker',
           stickerPackageId: packageId,
           stickerId: stickerId,
-          senderId: currentUser.id // ✨ เพิ่ม senderId
+          senderId: currentUser.id,
+          clientId: clientId // ส่ง clientId ไปด้วย
         }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
             alert('⚠️ License หมดอายุ!\n\nคุณไม่สามารถส่งข้อความได้\nกรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่');
