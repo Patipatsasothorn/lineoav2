@@ -1233,13 +1233,6 @@ app.post('/api/conversations/archive', async (req, res) => {
       .query(`SELECT id FROM ArchivedConversations
               WHERE conversationKey = @conversationKey AND ownerId = @currentUserId`);
 
-    if (existingArchive.recordset.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Conversation already archived'
-      });
-    }
-
     // ดึงข้อมูล channel name
     const channelInfo = await pool.request()
       .input('channelId', sql.NVarChar, channelId)
@@ -1253,22 +1246,53 @@ app.post('/api/conversations/archive', async (req, res) => {
     console.log('📦 [Archive] userName:', userName);
     console.log('📦 [Archive] channelName:', channelName);
 
-    // บันทึกการเก็บถาวรและรับ archiveId
-    const archiveResult = await pool.request()
-      .input('conversationKey', sql.NVarChar, conversationKey)
-      .input('userId', sql.NVarChar, userId)
-      .input('userName', sql.NVarChar, userName)
-      .input('channelId', sql.NVarChar, channelId)
-      .input('channelName', sql.NVarChar, channelName)
-      .input('messageCount', sql.Int, messagesResult.recordset.length)
-      .input('ownerId', sql.NVarChar, currentUserId)
-      .input('note', sql.NVarChar, note || null)
-      .query(`INSERT INTO ArchivedConversations
-              (conversationKey, userId, userName, channelId, channelName, messageCount, ownerId, note, archivedAt)
-              OUTPUT INSERTED.id
-              VALUES (@conversationKey, @userId, @userName, @channelId, @channelName, @messageCount, @ownerId, @note, GETDATE())`);
+    let archiveId;
 
-    const archiveId = archiveResult.recordset[0].id;
+    if (existingArchive.recordset.length > 0) {
+      // มี archive อยู่แล้ว - อัปเดตข้อมูล
+      archiveId = existingArchive.recordset[0].id;
+      console.log('📦 [Archive] Updating existing archive. Archive ID:', archiveId);
+
+      // นับจำนวนข้อความเก่าที่มีอยู่แล้ว
+      const oldMessagesResult = await pool.request()
+        .input('archiveId', sql.Int, archiveId)
+        .query(`SELECT COUNT(*) as count FROM ArchivedMessages WHERE archiveId = @archiveId`);
+
+      const oldMessageCount = oldMessagesResult.recordset[0].count;
+      const newTotalCount = oldMessageCount + messagesResult.recordset.length;
+
+      // อัปเดต archive ที่มีอยู่
+      await pool.request()
+        .input('archiveId', sql.Int, archiveId)
+        .input('messageCount', sql.Int, newTotalCount)
+        .input('note', sql.NVarChar, note || null)
+        .query(`UPDATE ArchivedConversations
+                SET messageCount = @messageCount,
+                    note = @note,
+                    archivedAt = GETDATE()
+                WHERE id = @archiveId`);
+
+      console.log('📦 [Archive] Existing messages:', oldMessageCount, 'New messages:', messagesResult.recordset.length, 'Total:', newTotalCount);
+    } else {
+      // ไม่มี archive - สร้างใหม่
+      console.log('📦 [Archive] Creating new archive');
+
+      const archiveResult = await pool.request()
+        .input('conversationKey', sql.NVarChar, conversationKey)
+        .input('userId', sql.NVarChar, userId)
+        .input('userName', sql.NVarChar, userName)
+        .input('channelId', sql.NVarChar, channelId)
+        .input('channelName', sql.NVarChar, channelName)
+        .input('messageCount', sql.Int, messagesResult.recordset.length)
+        .input('ownerId', sql.NVarChar, currentUserId)
+        .input('note', sql.NVarChar, note || null)
+        .query(`INSERT INTO ArchivedConversations
+                (conversationKey, userId, userName, channelId, channelName, messageCount, ownerId, note, archivedAt)
+                OUTPUT INSERTED.id
+                VALUES (@conversationKey, @userId, @userName, @channelId, @channelName, @messageCount, @ownerId, @note, GETDATE())`);
+
+      archiveId = archiveResult.recordset[0].id;
+    }
 
     // คัดลอกข้อความทั้งหมดไปยัง ArchivedMessages
     for (const msg of messagesResult.recordset) {

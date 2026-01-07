@@ -220,11 +220,24 @@ function ArchivedChats({ currentUser }) {
       <div className="archived-sidebar">
         {!selectedChannel ? (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '20px', borderBottom: '1px solid #e2e8f0' }}>
-              <h2 style={{ margin: 0 }}>Channels</h2>
+            <div className="sidebar-header">
+              <div className="header-content">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <h2>Channels</h2>
+              </div>
+              <div className="header-badge">
+                {Object.keys(groupedByChannel).length}
+              </div>
             </div>
 
             <div className="search-box">
+              <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
               <input
                 type="text"
                 placeholder="ค้นหา Channel..."
@@ -237,40 +250,57 @@ function ArchivedChats({ currentUser }) {
                   className="search-clear"
                   onClick={() => setSearchQuery('')}
                 >
-                  ✕
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
                 </button>
               )}
             </div>
 
             {archivedConversations.length === 0 ? (
               <div className="no-archives">
-                <p>ยังไม่มีแชทที่เก็บไว้</p>
-                <p>แชทที่จบแล้วจะปรากฏที่นี่</p>
+                <div className="empty-icon">📦</div>
+                <p className="empty-title">ยังไม่มีแชทที่เก็บไว้</p>
+                <p className="empty-subtitle">แชทที่จบแล้วจะปรากฏที่นี่</p>
               </div>
             ) : filteredChannels.length === 0 ? (
               <div className="no-archives">
-                <p>ไม่พบผลลัพธ์</p>
+                <div className="empty-icon">🔍</div>
+                <p className="empty-title">ไม่พบผลลัพธ์</p>
+                <p className="empty-subtitle">ลองค้นหาด้วยคำอื่น</p>
               </div>
             ) : (
               <div className="archived-list">
-                {filteredChannels.map((channelName) => {
+                {filteredChannels.map((channelName, index) => {
                   const channelArchives = groupedByChannel[channelName];
                   const totalMessages = channelArchives.reduce((sum, archive) => sum + archive.messageCount, 0);
 
                   return (
                     <div
                       key={channelName}
-                      className="archived-item"
+                      className="archived-item channel-item"
                       onClick={() => setSelectedChannel(channelName)}
+                      style={{ animationDelay: `${index * 0.05}s` }}
                     >
                       <div className="archived-header">
-                        <span className="archived-channel">{channelName}</span>
-                        <span className="archived-date">
-                          {channelArchives.length} แชท
+                        <div className="channel-name-wrapper">
+                          <svg className="channel-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                          </svg>
+                          <span className="archived-channel">{channelName}</span>
+                        </div>
+                        <span className="archived-badge">
+                          {channelArchives.length}
                         </span>
                       </div>
                       <div className="archived-info">
-                        <span className="message-count">📨 {totalMessages} ข้อความ</span>
+                        <span className="message-count">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                          </svg>
+                          {totalMessages} ข้อความ
+                        </span>
                       </div>
                     </div>
                   );
@@ -280,25 +310,21 @@ function ArchivedChats({ currentUser }) {
           </>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '20px', borderBottom: '1px solid #e2e8f0' }}>
+            <div className="sidebar-header">
               <button
                 onClick={() => {
                   setSelectedChannel(null);
                   setSelectedArchive(null);
                   setMessages([]);
                 }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  marginRight: '10px',
-                  padding: '5px'
-                }}
+                className="back-button"
               >
-                ←
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="19" y1="12" x2="5" y2="12"/>
+                  <polyline points="12 19 5 12 12 5"/>
+                </svg>
               </button>
-              <h2 style={{ margin: 0 }}>{selectedChannel}</h2>
+              <h2>{selectedChannel}</h2>
             </div>
 
             <div className="archived-list">
@@ -328,28 +354,30 @@ function ArchivedChats({ currentUser }) {
                       📝 {archive.note}
                     </div>
                   )}
-                  <button
-                    className="btn-restore"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRestoreConversation(archive.id);
-                    }}
-                    title="นำแชทกลับมา"
-                  >
-                    ↩️ นำกลับ
-                  </button>
-                  {currentUser.role !== 'agent' && (
+                  <div className="archived-actions">
                     <button
-                      className="btn-delete"
+                      className="btn-restore"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteConversation(archive.id);
+                        handleRestoreConversation(archive.id);
                       }}
-                      title="ลบถาวร"
+                      title="นำแชทกลับมา"
                     >
-                      🗑️ ลบ
+                      ↩️ นำกลับ
                     </button>
-                  )}
+                    {currentUser.role !== 'agent' && (
+                      <button
+                        className="btn-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteConversation(archive.id);
+                        }}
+                        title="ลบถาวร"
+                      >
+                        🗑️ ลบ
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

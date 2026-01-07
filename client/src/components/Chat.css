@@ -573,6 +573,7 @@
   word-wrap: break-word;
   line-height: 1.6;
   font-size: 15px;
+  border: none;
 }
 
 .message-content.received .message-text {
