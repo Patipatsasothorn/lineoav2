@@ -50,10 +50,10 @@ const upload = multer({
 
 // SQL Server Configuration
 const sqlConfig = {
-  server: 'localhost',
-  database: 'LineOA',
-  user: 'sa',
-  password: 'StrongPassw0rd!Here',
+  server: process.env.DB_SERVER || 'localhost',
+  database: process.env.DB_DATABASE || 'LineOA',
+  user: process.env.DB_USER || 'sa',
+  password: process.env.DB_PASSWORD || 'StrongPassw0rd!Here',
   options: {
     encrypt: false,
     trustServerCertificate: true,

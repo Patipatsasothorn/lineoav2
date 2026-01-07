@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(cat:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npm start)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nUpdate UI theme to modern blue/cyan gradient design\n\n- Changed color scheme from purple to blue/cyan throughout the application\n- Updated navbar with minimal Font Awesome icons\n- Changed branding from \"LineOA v2\" to \"QO CHAT\"\n- Fixed input text visibility in Login/Register pages \\(white background, dark text\\)\n- Removed extra borders and frames from chat messages\n- Enhanced UI with modern gradients, glassmorphism effects, and smooth animations\n- Improved button styling with gradient backgrounds and shadow effects\n- Updated scrollbar styling to match new theme\n- Added responsive animations and transitions throughout\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

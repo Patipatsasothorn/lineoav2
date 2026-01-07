@@ -74,7 +74,7 @@ function App() {
       {/* Mobile Header */}
       <div className="mobile-header">
         <div className="nav-brand">
-          LineOA v2 {isAdmin && <span className="admin-badge">Admin</span>}
+          QO CHAT {isAdmin && <span className="admin-badge">Admin</span>}
         </div>
         <button
           className="mobile-menu-toggle"
@@ -92,38 +92,38 @@ function App() {
               className={`nav-link ${currentPage === 'home' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('home'); setIsMobileMenuOpen(false); }}
             >
-              🏠 หน้าหลัก
+              <i className="fas fa-home nav-icon"></i> หน้าหลัก
             </button>
             <button
               className={`nav-link ${currentPage === 'chat' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('chat'); setIsMobileMenuOpen(false); }}
             >
-              💬 แชท
+              <i className="fas fa-comments nav-icon"></i> แชท
             </button>
             <button
               className={`nav-link ${currentPage === 'archived' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('archived'); setIsMobileMenuOpen(false); }}
             >
-              📦 จบแชท
+              <i className="fas fa-check-circle nav-icon"></i> จบแชท
             </button>
             <button
               className={`nav-link ${currentPage === 'chatbot' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('chatbot'); setIsMobileMenuOpen(false); }}
             >
-              🤖 แชทบอท
+              <i className="fas fa-robot nav-icon"></i> แชทบอท
             </button>
             <button
               className={`nav-link ${currentPage === 'dashboard' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('dashboard'); setIsMobileMenuOpen(false); }}
             >
-              📊 แดชบอร์ด
+              <i className="fas fa-chart-line nav-icon"></i> แดชบอร์ด
             </button>
             {currentUser?.role !== 'agent' && (
               <button
                 className={`nav-link ${currentPage === 'team' ? 'active' : ''}`}
                 onClick={() => { setCurrentPage('team'); setIsMobileMenuOpen(false); }}
               >
-                👨‍💼 กำหนดลูกทีม
+                <i className="fas fa-users nav-icon"></i> กำหนดลูกทีม
               </button>
             )}
 
@@ -133,13 +133,13 @@ function App() {
                   className={`nav-link ${currentPage === 'users' ? 'active' : ''}`}
                   onClick={() => { setCurrentPage('users'); setIsMobileMenuOpen(false); }}
                 >
-                  👥 จัดการบัญชี
+                  <i className="fas fa-user-cog nav-icon"></i> จัดการบัญชี
                 </button>
                 <button
                   className={`nav-link ${currentPage === 'licenses' ? 'active' : ''}`}
                   onClick={() => { setCurrentPage('licenses'); setIsMobileMenuOpen(false); }}
                 >
-                  🎫 จัดการ License
+                  <i className="fas fa-key nav-icon"></i> จัดการ License
                 </button>
               </>
             )}
@@ -148,11 +148,11 @@ function App() {
               className={`nav-link ${currentPage === 'settings' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('settings'); setIsMobileMenuOpen(false); }}
             >
-              ⚙️ {currentUser?.username}
+              <i className="fas fa-user-circle nav-icon"></i> {currentUser?.username}
             </button>
 
             <button className="nav-link logout" onClick={handleLogout}>
-              🚪 ออกจากระบบ
+              <i className="fas fa-sign-out-alt nav-icon"></i> ออกจากระบบ
             </button>
           </nav>
         </div>
@@ -161,7 +161,7 @@ function App() {
       {/* Desktop Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <h1>LineOA v2</h1>
+          <h1>QO CHAT</h1>
           {isAdmin && <span className="admin-badge">Admin</span>}
         </div>
 
@@ -170,35 +170,35 @@ function App() {
             className={`sidebar-link ${currentPage === 'home' ? 'active' : ''}`}
             onClick={() => setCurrentPage('home')}
           >
-            <span className="sidebar-icon">🏠</span>
+            <i className="fas fa-home sidebar-icon"></i>
             <span className="sidebar-text">หน้าหลัก</span>
           </button>
           <button
             className={`sidebar-link ${currentPage === 'chat' ? 'active' : ''}`}
             onClick={() => setCurrentPage('chat')}
           >
-            <span className="sidebar-icon">💬</span>
+            <i className="fas fa-comments sidebar-icon"></i>
             <span className="sidebar-text">แชท</span>
           </button>
           <button
             className={`sidebar-link ${currentPage === 'archived' ? 'active' : ''}`}
             onClick={() => setCurrentPage('archived')}
           >
-            <span className="sidebar-icon">📦</span>
+            <i className="fas fa-check-circle sidebar-icon"></i>
             <span className="sidebar-text">จบแชท</span>
           </button>
           <button
             className={`sidebar-link ${currentPage === 'chatbot' ? 'active' : ''}`}
             onClick={() => setCurrentPage('chatbot')}
           >
-            <span className="sidebar-icon">🤖</span>
+            <i className="fas fa-robot sidebar-icon"></i>
             <span className="sidebar-text">แชทบอท</span>
           </button>
           <button
             className={`sidebar-link ${currentPage === 'dashboard' ? 'active' : ''}`}
             onClick={() => setCurrentPage('dashboard')}
           >
-            <span className="sidebar-icon">📊</span>
+            <i className="fas fa-chart-line sidebar-icon"></i>
             <span className="sidebar-text">แดชบอร์ด</span>
           </button>
           {currentUser?.role !== 'agent' && (
@@ -206,7 +206,7 @@ function App() {
               className={`sidebar-link ${currentPage === 'team' ? 'active' : ''}`}
               onClick={() => setCurrentPage('team')}
             >
-              <span className="sidebar-icon">👨‍💼</span>
+              <i className="fas fa-users sidebar-icon"></i>
               <span className="sidebar-text">กำหนดลูกทีม</span>
             </button>
           )}
@@ -217,14 +217,14 @@ function App() {
                 className={`sidebar-link ${currentPage === 'users' ? 'active' : ''}`}
                 onClick={() => setCurrentPage('users')}
               >
-                <span className="sidebar-icon">👥</span>
+                <i className="fas fa-user-cog sidebar-icon"></i>
                 <span className="sidebar-text">จัดการบัญชี</span>
               </button>
               <button
                 className={`sidebar-link ${currentPage === 'licenses' ? 'active' : ''}`}
                 onClick={() => setCurrentPage('licenses')}
               >
-                <span className="sidebar-icon">🎫</span>
+                <i className="fas fa-key sidebar-icon"></i>
                 <span className="sidebar-text">จัดการ License</span>
               </button>
             </>
@@ -236,11 +236,11 @@ function App() {
             className={`sidebar-link ${currentPage === 'settings' ? 'active' : ''}`}
             onClick={() => setCurrentPage('settings')}
           >
-            <span className="sidebar-icon">⚙️</span>
+            <i className="fas fa-user-circle sidebar-icon"></i>
             <span className="sidebar-text">{currentUser?.username}</span>
           </button>
           <button className="sidebar-link logout" onClick={handleLogout}>
-            <span className="sidebar-icon">🚪</span>
+            <i className="fas fa-sign-out-alt sidebar-icon"></i>
             <span className="sidebar-text">ออกจากระบบ</span>
           </button>
         </div>

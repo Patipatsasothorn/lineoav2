@@ -71,7 +71,7 @@ function Register({ onBackToLogin }) {
     <div className="register-container">
       <div className="register-box">
         <h1 className="register-title">ลงทะเบียนใช้งาน</h1>
-        <p className="register-subtitle">LineOA v2 - ระบบจัดการ LINE Official Account</p>
+        <p className="register-subtitle">QO Chat - ระบบจัดการแชทบริการลูกค้า</p>
         
         <form onSubmit={handleSubmit} className="register-form">
           <div className="form-group">

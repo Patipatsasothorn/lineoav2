@@ -56,7 +56,7 @@ function Login({ onLogin }) {
     <div className="login-container">
       <div className="login-box">
         <h1 className="login-title">เข้าสู่ระบบ</h1>
-        <p className="login-subtitle">LineOA v2 - ระบบจัดการ LINE Official Account</p>
+        <p className="login-subtitle">QO Chat - ระบบจัดการแชทบริการลูกค้า</p>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
