@@ -12,6 +12,7 @@ import Chatbot from './components/Chatbot';
 import Dashboard from './components/Dashboard';
 import TeamManagement from './components/TeamManagement';
 import AgentManagement from './components/agent';
+import QuickRepliesManager from './components/QuickRepliesManager';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -31,7 +32,7 @@ function App() {
     // รองรับ hash navigation
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash && ['home', 'chat', 'archived', 'chatbot', 'dashboard', 'team', 'users', 'licenses', 'settings'].includes(hash)) {
+      if (hash && ['home', 'chat', 'archived', 'quickreplies', 'chatbot', 'dashboard', 'team', 'users', 'licenses', 'settings'].includes(hash)) {
         setCurrentPage(hash);
       }
     };
@@ -163,6 +164,12 @@ function App() {
               <i className="fas fa-check-circle nav-icon"></i> จบแชท
             </button>
             <button
+              className={`nav-link ${currentPage === 'quickreplies' ? 'active' : ''}`}
+              onClick={() => { setCurrentPage('quickreplies'); setIsMobileMenuOpen(false); }}
+            >
+              <i className="fas fa-comment-dots nav-icon"></i> ชุดคำตอบ
+            </button>
+            <button
               className={`nav-link ${currentPage === 'chatbot' ? 'active' : ''}`}
               onClick={() => { setCurrentPage('chatbot'); setIsMobileMenuOpen(false); }}
             >
@@ -244,6 +251,13 @@ function App() {
             <span className="sidebar-text">จบแชท</span>
           </button>
           <button
+            className={`sidebar-link ${currentPage === 'quickreplies' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('quickreplies')}
+          >
+            <i className="fas fa-comment-dots sidebar-icon"></i>
+            <span className="sidebar-text">ชุดคำตอบ</span>
+          </button>
+          <button
             className={`sidebar-link ${currentPage === 'chatbot' ? 'active' : ''}`}
             onClick={() => setCurrentPage('chatbot')}
           >
@@ -306,6 +320,7 @@ function App() {
         {currentPage === 'home' && <Home currentUser={currentUser} />}
         {currentPage === 'chat' && <Chat currentUser={currentUser} />}
         {currentPage === 'archived' && <ArchivedChats currentUser={currentUser} />}
+        {currentPage === 'quickreplies' && <QuickRepliesManager currentUser={currentUser} />}
         {currentPage === 'chatbot' && <Chatbot currentUser={currentUser} />}
         {currentPage === 'dashboard' && <Dashboard currentUser={currentUser} />}
         {currentPage === 'team' && <AgentManagement currentUser={currentUser} />}

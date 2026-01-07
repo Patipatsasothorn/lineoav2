@@ -746,7 +746,7 @@ app.post('/webhook/:channelId', async (req, res) => {
 
 // Send Message
 app.post('/api/messages/send', async (req, res) => {
-  const { channelId, userId, text, messageType, imageUrl, stickerPackageId, stickerId, senderId } = req.body;
+  const { channelId, userId, text, messageType, imageUrl, stickerPackageId, stickerId, senderId, clientId } = req.body;
 
 
   try {
@@ -864,9 +864,16 @@ app.post('/api/messages/send', async (req, res) => {
 
     const newMessage = {
       id: newMessageId,
+      clientId: clientId, // เพิ่ม clientId เพื่อให้ frontend จับคู่กับ optimistic update ได้
+      channelId: channelId,
+      userId: userId,
       text: displayText,
       type: 'sent',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      messageType: messageType || 'text',
+      imageUrl: imageUrl,
+      stickerPackageId: stickerPackageId,
+      stickerId: stickerId
     };
 
 
@@ -1444,15 +1451,18 @@ app.delete('/api/conversations/archived/:archiveId', async (req, res) => {
     });
   }
 
+  // ป้องกันไม่ให้ agent ลบแชทที่เก็บไว้
+  if (agentId) {
+    return res.status(403).json({
+      success: false,
+      message: 'Agents are not allowed to delete archived conversations'
+    });
+  }
+
   try {
     const pool = await poolPromise;
 
-    // ใช้ hardcoded ownerId สำหรับ agent
     let ownerIdToUse = userId;
-    if (agentId) {
-      ownerIdToUse = '1767638029604';
-      console.log('🗑️ [Delete] Agent detected, using hardcoded ownerId:', ownerIdToUse);
-    }
 
     // ตรวจสอบว่า archive นี้เป็นของ user นี้
     const archiveCheck = await pool.request()
@@ -1485,6 +1495,263 @@ app.delete('/api/conversations/archived/:archiveId', async (req, res) => {
     });
   } catch (error) {
     console.error('Delete archive error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ===== Quick Replies Management =====
+
+// Get Quick Replies
+app.get('/api/quick-replies', async (req, res) => {
+  const { userId, agentId, category } = req.query;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({ success: false, message: 'userId or agentId is required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Determine owner ID
+    let ownerIdToUse = userId;
+    if (agentId) {
+      const agentCheck = await pool.request()
+        .input('agentId', sql.VarChar, agentId)
+        .query('SELECT userId FROM Agents WHERE id = @agentId');
+
+      if (agentCheck.recordset.length > 0) {
+        ownerIdToUse = agentCheck.recordset[0].userId;
+      }
+    }
+
+    let query = 'SELECT * FROM QuickReplies WHERE userId = @userId';
+    const request = pool.request().input('userId', sql.NVarChar, ownerIdToUse);
+
+    if (category && category !== 'all') {
+      query += ' AND category = @category';
+      request.input('category', sql.NVarChar, category);
+    }
+
+    query += ' ORDER BY sortOrder ASC, createdAt DESC';
+
+    const result = await request.query(query);
+
+    res.json({
+      success: true,
+      quickReplies: result.recordset
+    });
+  } catch (error) {
+    console.error('Get quick replies error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get Quick Reply Categories
+app.get('/api/quick-replies/categories', async (req, res) => {
+  const { userId, agentId } = req.query;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({ success: false, message: 'userId or agentId is required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Determine owner ID
+    let ownerIdToUse = userId;
+    if (agentId) {
+      const agentCheck = await pool.request()
+        .input('agentId', sql.VarChar, agentId)
+        .query('SELECT userId FROM Agents WHERE id = @agentId');
+
+      if (agentCheck.recordset.length > 0) {
+        ownerIdToUse = agentCheck.recordset[0].userId;
+      }
+    }
+
+    const result = await pool.request()
+      .input('userId', sql.NVarChar, ownerIdToUse)
+      .query(`
+        SELECT category, COUNT(*) as count
+        FROM QuickReplies
+        WHERE userId = @userId
+        GROUP BY category
+        ORDER BY category ASC
+      `);
+
+    res.json({
+      success: true,
+      categories: result.recordset
+    });
+  } catch (error) {
+    console.error('Get quick reply categories error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Create Quick Reply
+app.post('/api/quick-replies', async (req, res) => {
+  const { title, message, category, messageType, imageUrl, stickerPackageId, stickerId, sortOrder, userId, agentId } = req.body;
+
+  if (!title || !category) {
+    return res.status(400).json({ success: false, message: 'Title and category are required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Determine owner ID
+    let ownerIdToUse = userId;
+    if (agentId) {
+      const agentCheck = await pool.request()
+        .input('agentId', sql.VarChar, agentId)
+        .query('SELECT userId FROM Agents WHERE id = @agentId');
+
+      if (agentCheck.recordset.length > 0) {
+        ownerIdToUse = agentCheck.recordset[0].userId;
+      }
+    }
+
+    const id = Date.now().toString();
+
+    await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, ownerIdToUse)
+      .input('title', sql.NVarChar, title)
+      .input('message', sql.NVarChar, message || null)
+      .input('category', sql.NVarChar, category)
+      .input('messageType', sql.NVarChar, messageType || 'text')
+      .input('imageUrl', sql.NVarChar, imageUrl || null)
+      .input('stickerPackageId', sql.NVarChar, stickerPackageId || null)
+      .input('stickerId', sql.NVarChar, stickerId || null)
+      .input('sortOrder', sql.Int, sortOrder || 0)
+      .query(`
+        INSERT INTO QuickReplies (id, userId, title, message, category, messageType, imageUrl, stickerPackageId, stickerId, sortOrder, createdAt)
+        VALUES (@id, @userId, @title, @message, @category, @messageType, @imageUrl, @stickerPackageId, @stickerId, @sortOrder, GETDATE())
+      `);
+
+    res.json({
+      success: true,
+      message: 'Quick reply created successfully',
+      id: id
+    });
+  } catch (error) {
+    console.error('Create quick reply error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update Quick Reply
+app.put('/api/quick-replies/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, message, category, messageType, imageUrl, stickerPackageId, stickerId, sortOrder, userId, agentId } = req.body;
+
+  if (!title || !category) {
+    return res.status(400).json({ success: false, message: 'Title and category are required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Determine owner ID
+    let ownerIdToUse = userId;
+    if (agentId) {
+      const agentCheck = await pool.request()
+        .input('agentId', sql.VarChar, agentId)
+        .query('SELECT userId FROM Agents WHERE id = @agentId');
+
+      if (agentCheck.recordset.length > 0) {
+        ownerIdToUse = agentCheck.recordset[0].userId;
+      }
+    }
+
+    // Check if quick reply exists and belongs to user
+    const checkResult = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, ownerIdToUse)
+      .query('SELECT id FROM QuickReplies WHERE id = @id AND userId = @userId');
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Quick reply not found' });
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('title', sql.NVarChar, title)
+      .input('message', sql.NVarChar, message || null)
+      .input('category', sql.NVarChar, category)
+      .input('messageType', sql.NVarChar, messageType || 'text')
+      .input('imageUrl', sql.NVarChar, imageUrl || null)
+      .input('stickerPackageId', sql.NVarChar, stickerPackageId || null)
+      .input('stickerId', sql.NVarChar, stickerId || null)
+      .input('sortOrder', sql.Int, sortOrder || 0)
+      .query(`
+        UPDATE QuickReplies
+        SET title = @title,
+            message = @message,
+            category = @category,
+            messageType = @messageType,
+            imageUrl = @imageUrl,
+            stickerPackageId = @stickerPackageId,
+            stickerId = @stickerId,
+            sortOrder = @sortOrder
+        WHERE id = @id
+      `);
+
+    res.json({
+      success: true,
+      message: 'Quick reply updated successfully'
+    });
+  } catch (error) {
+    console.error('Update quick reply error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Delete Quick Reply
+app.delete('/api/quick-replies/:id', async (req, res) => {
+  const { id } = req.params;
+  const { userId, agentId } = req.query;
+
+  if (!userId && !agentId) {
+    return res.status(400).json({ success: false, message: 'userId or agentId is required' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Determine owner ID
+    let ownerIdToUse = userId;
+    if (agentId) {
+      const agentCheck = await pool.request()
+        .input('agentId', sql.VarChar, agentId)
+        .query('SELECT userId FROM Agents WHERE id = @agentId');
+
+      if (agentCheck.recordset.length > 0) {
+        ownerIdToUse = agentCheck.recordset[0].userId;
+      }
+    }
+
+    // Check if quick reply exists and belongs to user
+    const checkResult = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('userId', sql.NVarChar, ownerIdToUse)
+      .query('SELECT id FROM QuickReplies WHERE id = @id AND userId = @userId');
+
+    if (checkResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, message: 'Quick reply not found' });
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('DELETE FROM QuickReplies WHERE id = @id');
+
+    res.json({
+      success: true,
+      message: 'Quick reply deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete quick reply error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

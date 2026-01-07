@@ -27,6 +27,9 @@ function Chat({ currentUser }) {
   const [archiveNote, setArchiveNote] = useState(''); // โน้ตสำหรับจบแชท
   const [archiveLoading, setArchiveLoading] = useState(false); // สถานะ loading ของการจบแชท
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, data: null }); // Dialog state
+  const [quickReplies, setQuickReplies] = useState([]); // ชุดคำตอบสำเร็จรูป
+  const [showQuickReplies, setShowQuickReplies] = useState(false); // แสดง/ซ่อน Quick Replies picker
+  const [quickReplySearch, setQuickReplySearch] = useState(''); // ค้นหาชุดคำตอบ
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -45,6 +48,7 @@ function Chat({ currentUser }) {
       fetchGroups();
       fetchLicenseStatus(); // ตรวจสอบสถานะ license
       fetchPinnedConversations(); // ดึงการสนทนาที่ปักหมุด
+      fetchQuickReplies(); // ดึงชุดคำตอบสำเร็จรูป
     }
     // เชื่อมต่อ SSE สำหรับ real-time updates
     eventSourceRef.current = new EventSource('http://localhost:5000/api/messages/stream');
@@ -54,6 +58,24 @@ function Chat({ currentUser }) {
       if (data.type === 'new_message') {
         // เพิ่มข้อความใหม่ท้าย array (เก่า -> ใหม่)
         setMessages(prevMessages => {
+          // ตรวจสอบว่ามีข้อความที่มี clientId เดียวกันอยู่แล้วหรือไม่ (จาก optimistic update)
+          if (data.message.clientId) {
+            const existingIndex = prevMessages.findIndex(msg => msg.clientId === data.message.clientId);
+            if (existingIndex !== -1) {
+              // แทนที่ optimistic message ด้วยข้อความจริงจาก server
+              const updatedMessages = [...prevMessages];
+              updatedMessages[existingIndex] = data.message;
+              return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+            }
+          }
+
+          // ตรวจสอบว่ามีข้อความที่มี id เดียวกันอยู่แล้วหรือไม่ (ป้องกันการแสดงซ้ำ)
+          const isDuplicate = prevMessages.some(msg => msg.id === data.message.id);
+          if (isDuplicate) {
+            return prevMessages;
+          }
+
+          // ถ้าไม่ซ้ำ ให้เพิ่มข้อความใหม่
           const newMessages = [...prevMessages, data.message];
           return newMessages.sort((a, b) => a.timestamp - b.timestamp);
         });
@@ -180,6 +202,111 @@ function Chat({ currentUser }) {
     return pinnedConversations.some(pin => pin.conversationKey === conversationKey);
   };
 
+  const fetchQuickReplies = async () => {
+    try {
+      const isAgent = currentUser.role === 'agent';
+      const param = isAgent ? `agentId=${currentUser.id}` : `userId=${currentUser.id}`;
+      const response = await fetch(`http://localhost:5000/api/quick-replies?${param}`);
+      const data = await response.json();
+      if (data.success) {
+        setQuickReplies(data.quickReplies);
+      }
+    } catch (error) {
+      console.error('Error fetching quick replies:', error);
+    }
+  };
+
+  const handleSelectQuickReply = (quickReply) => {
+    if (quickReply.messageType === 'text') {
+      setMessageText(quickReply.message);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    } else if (quickReply.messageType === 'image') {
+      handleSendImageFromQuickReply(quickReply.imageUrl);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    } else if (quickReply.messageType === 'sticker') {
+      handleSendSticker(quickReply.stickerPackageId, quickReply.stickerId);
+      setShowQuickReplies(false);
+      setQuickReplySearch('');
+    }
+  };
+
+  const handleSendImageFromQuickReply = async (imageUrl) => {
+    if (!selectedUser || !selectedChannel) {
+      toast.error('กรุณาเลือกห้องแชทก่อน');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: '[รูปภาพ]',
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: 'image',
+        imageUrl: imageUrl,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
+      const response = await fetch('http://localhost:5000/api/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channelId: selectedChannel,
+          userId: selectedUser,
+          text: '[รูปภาพ]',
+          messageType: 'image',
+          imageUrl: imageUrl,
+          senderId: currentUser.id,
+          clientId: clientId
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
+        if (data.code === 'LICENSE_EXPIRED') {
+          if (currentUser.role === 'agent') {
+            toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้');
+          } else {
+            toast.error('⚠️ License หมดอายุ! กรุณาเปิดใช้งาน License ใหม่');
+          }
+        } else {
+          toast.error('ส่งรูปภาพไม่สำเร็จ: ' + data.message);
+        }
+      }
+    } catch (err) {
+      console.error('Error sending image from quick reply:', err);
+      toast.error('เกิดข้อผิดพลาดในการส่งรูปภาพ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredQuickReplies = quickReplies.filter(qr =>
+    qr.title.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+    qr.message.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+    qr.category.toLowerCase().includes(quickReplySearch.toLowerCase())
+  );
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
 
@@ -195,6 +322,10 @@ function Chat({ currentUser }) {
     setLoading(true);
 
     try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
       let imageUrl = null;
 
       // ถ้ามีรูปภาพ ให้ upload ก่อน
@@ -218,6 +349,22 @@ function Chat({ currentUser }) {
         imageUrl = uploadData.imageUrl;
       }
 
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: messageText || '[รูปภาพ]',
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: imageUrl ? 'image' : 'text',
+        imageUrl: imageUrl,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
         headers: {
@@ -229,7 +376,8 @@ function Chat({ currentUser }) {
           text: messageText || '[รูปภาพ]',
           messageType: imageUrl ? 'image' : 'text',
           imageUrl: imageUrl,
-          senderId: currentUser.id // ✨ เพิ่ม senderId
+          senderId: currentUser.id,
+          clientId: clientId
         }),
       });
 
@@ -240,6 +388,9 @@ function Chat({ currentUser }) {
         setSelectedImage(null);
         setImagePreview(null);
       } else {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         // ตรวจสอบว่าเป็น error จาก license หรือไม่
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
@@ -295,6 +446,27 @@ function Chat({ currentUser }) {
     setShowStickerPicker(false);
 
     try {
+      // สร้าง clientId สำหรับ optimistic update
+      const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const timestamp = Date.now();
+
+      // แสดง message ทันทีก่อนส่งไปยัง server (Optimistic Update)
+      const optimisticMessage = {
+        id: clientId,
+        clientId: clientId,
+        channelId: selectedChannel,
+        userId: selectedUser,
+        text: `[สติกเกอร์: ${packageId}/${stickerId}]`,
+        type: 'sent',
+        timestamp: timestamp,
+        messageType: 'sticker',
+        stickerPackageId: packageId,
+        stickerId: stickerId,
+        senderId: currentUser.id
+      };
+
+      setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+
       const response = await fetch('http://localhost:5000/api/messages/send', {
         method: 'POST',
         headers: {
@@ -307,13 +479,17 @@ function Chat({ currentUser }) {
           messageType: 'sticker',
           stickerPackageId: packageId,
           stickerId: stickerId,
-          senderId: currentUser.id // ✨ เพิ่ม senderId
+          senderId: currentUser.id,
+          clientId: clientId
         }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
+        // ลบ optimistic message ถ้าส่งไม่สำเร็จ
+        setMessages(prevMessages => prevMessages.filter(msg => msg.clientId !== clientId));
+
         if (data.code === 'LICENSE_EXPIRED') {
           if (currentUser.role === 'agent') {
             toast.error('⚠️ License หมดอายุ! คุณไม่สามารถส่งข้อความได้ กรุณาติดต่อเจ้าของบัญชีเพื่อเปิดใช้งาน License ใหม่', { duration: 5000 });
@@ -325,6 +501,7 @@ function Chat({ currentUser }) {
         }
       }
     } catch (err) {
+      // ลบ optimistic message ถ้าเกิด error
       console.error('Error sending sticker:', err);
       toast.error('เกิดข้อผิดพลาดในการส่งสติกเกอร์');
     } finally {
@@ -1010,6 +1187,16 @@ function Chat({ currentUser }) {
                 😊
               </button>
 
+              <button
+                type="button"
+                className="btn-quick-reply"
+                onClick={() => setShowQuickReplies(!showQuickReplies)}
+                disabled={loading || (currentUser.role !== 'admin' && !licenseStatus?.isValid)}
+                title="ชุดคำตอบสำเร็จรูป"
+              >
+                📝
+              </button>
+
               {imagePreview && (
                 <div className="image-preview">
                   <img src={imagePreview} alt="Preview" />
@@ -1088,6 +1275,50 @@ function Chat({ currentUser }) {
                       />
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {showQuickReplies && (
+              <div className="quick-reply-picker">
+                <div className="quick-reply-picker-header">
+                  <span>ชุดคำตอบสำเร็จรูป</span>
+                  <button onClick={() => setShowQuickReplies(false)}>✕</button>
+                </div>
+                <div className="quick-reply-search">
+                  <input
+                    type="text"
+                    placeholder="ค้นหาชุดคำตอบ..."
+                    value={quickReplySearch}
+                    onChange={(e) => setQuickReplySearch(e.target.value)}
+                  />
+                </div>
+                <div className="quick-reply-list">
+                  {filteredQuickReplies.length === 0 ? (
+                    <div className="no-quick-replies">
+                      <p>ไม่พบชุดคำตอบ</p>
+                    </div>
+                  ) : (
+                    filteredQuickReplies.map((qr) => (
+                      <div
+                        key={qr.id}
+                        className="quick-reply-item"
+                        onClick={() => handleSelectQuickReply(qr)}
+                      >
+                        <div className="quick-reply-title">
+                          {qr.messageType === 'image' && '🖼️ '}
+                          {qr.messageType === 'sticker' && '🎨 '}
+                          {qr.title}
+                        </div>
+                        <div className="quick-reply-message">
+                          {qr.messageType === 'text' && qr.message}
+                          {qr.messageType === 'image' && '[รูปภาพ]'}
+                          {qr.messageType === 'sticker' && '[สติกเกอร์]'}
+                        </div>
+                        <div className="quick-reply-category">{qr.category}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
